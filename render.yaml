@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: openjarvis
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./deploy/docker/Dockerfile
+    dockerContext: .
+    dockerCommand: serve --host 0.0.0.0 --port 8000 --engine ollama --model beam --agent orchestrator
+    healthCheckPath: /health
+    disk:
+      name: openjarvis-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: OPENJARVIS_HOME
+        value: /var/data/openjarvis
+      - key: OLLAMA_HOST
+        value: https://ollama.com
+      - key: OLLAMA_API_KEY
+        sync: false
+      - key: OPENJARVIS_API_KEY
+        sync: false
