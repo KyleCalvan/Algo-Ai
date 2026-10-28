@@ -37,6 +37,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not authorized:
                 if self._public_chat_route(request.method, request.url.path):
                     request.state.public_chat = True
+                elif self._public_quiz_route(request.method, request.url.path):
+                    pass
                 elif not self._public_module_read(request.method, request.url.path):
                     return JSONResponse(
                         {"detail": "Invalid API key" if auth else "Missing Authorization header"},
@@ -58,6 +60,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return (method == "POST" and path == "/v1/chat/completions") or (
             method == "GET" and path in ("/v1/models", "/v1/info")
         )
+
+    def _public_quiz_route(self, method: str, path: str) -> bool:
+        if not self._public_modules or method != "POST":
+            return False
+        return re.fullmatch(
+            r"/v1/modules/mod_[0-9a-f]{10}/quiz/generate|/v1/modules/quiz/[0-9a-f]{8}/submit",
+            path,
+        ) is not None
 
     @staticmethod
     def _requires_auth(path: str) -> bool:

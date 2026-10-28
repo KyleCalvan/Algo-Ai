@@ -48,6 +48,14 @@ def _make_app(api_key: str) -> FastAPI:
     async def import_module():
         return {"status": "imported"}
 
+    @app.post("/v1/modules/mod_123456789a/quiz/generate")
+    async def generate_quiz():
+        return {"quiz_id": "1234abcd"}
+
+    @app.post("/v1/modules/quiz/1234abcd/submit")
+    async def submit_quiz():
+        return {"score": 1}
+
     return app
 
 
@@ -106,6 +114,8 @@ class TestAuthMiddleware:
         client = TestClient(_make_app("oj_sk_test123"))
         assert client.get("/v1/modules/list").status_code == 200
         assert client.get("/v1/modules/mod_123456789a").status_code == 200
+        assert client.post("/v1/modules/mod_123456789a/quiz/generate").status_code == 200
+        assert client.post("/v1/modules/quiz/1234abcd/submit").status_code == 200
         assert client.post("/v1/modules/import/text").status_code == 401
         assert client.get("/v1/models").status_code == 401
 

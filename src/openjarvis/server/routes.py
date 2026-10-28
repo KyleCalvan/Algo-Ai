@@ -761,6 +761,27 @@ async def _handle_stream(
                     ],
                 )
                 yield f"data: {chunk.model_dump_json()}\n\n"
+            if not full_content:
+                # Some providers close an otherwise successful stream without
+                # sending text. Retry once through the non-streaming engine.
+                import asyncio
+
+                result = await asyncio.to_thread(
+                    engine.generate,
+                    messages,
+                    model=model,
+                    temperature=req.temperature,
+                    max_tokens=req.max_tokens,
+                )
+                full_content = result.get("content", "")
+                if not full_content:
+                    raise RuntimeError("The model returned an empty response")
+                chunk = ChatCompletionChunk(
+                    id=chunk_id,
+                    model=model,
+                    choices=[StreamChoice(delta=DeltaMessage(content=full_content))],
+                )
+                yield f"data: {chunk.model_dump_json()}\n\n"
         except Exception as exc:
             # Surface errors as a content chunk so the frontend can
             # display them instead of silently failing.

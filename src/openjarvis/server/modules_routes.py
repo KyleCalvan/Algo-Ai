@@ -345,7 +345,10 @@ async def generate_quiz(module_id: str, request: Request):
     except Exception:
         body = {}
     body = body or {}
-    num_questions = int(body.get("num_questions", 10))
+    try:
+        num_questions = min(max(int(body.get("num_questions", 10)), 1), 10)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid question count")
     difficulty = body.get("difficulty", "Medium")
     scope = body.get("scope", "module")
 
