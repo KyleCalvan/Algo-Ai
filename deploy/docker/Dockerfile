@@ -31,5 +31,4 @@ WORKDIR /app
 
 EXPOSE 8000
 
-ENTRYPOINT ["jarvis"]
-CMD ["serve", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "openjarvis.cli", "serve", "--host", "0.0.0.0", "--port", "8000", "--engine", "ollama", "--model", "beam", "--agent", "orchestrator"]
