@@ -54,6 +54,39 @@ def _make_agent(content="Hello from agent"):
     return agent
 
 
+def test_public_chat_allows_complete_graph_output(monkeypatch):
+    """A visual tutor response must have more than the former 512-token cap."""
+    monkeypatch.setenv("OPENJARVIS_PUBLIC_CHAT", "1")
+    received_max_tokens = []
+    engine = _make_engine()
+
+    async def capture_stream(messages, *, model, temperature, max_tokens):
+        received_max_tokens.append(max_tokens)
+        yield '```viz\n{"type":"graph","spec":{"graph":{"nodes":[],"edges":[]}}}\n```'
+
+    engine.stream = capture_stream
+    app = create_app(engine, "beam", api_key="oj_sk_test123")
+    response = TestClient(app).post(
+        "/v1/chat/completions",
+        json={
+            "model": "beam",
+            "messages": [{"role": "user", "content": "Show an MST graph"}],
+            "stream": True,
+            "max_tokens": 4096,
+        },
+    )
+    assert response.status_code == 200
+    assert received_max_tokens == [2048]
+    chunks = [
+        json.loads(line[6:]) for line in response.text.splitlines()
+        if line.startswith("data: {")
+    ]
+    assert any(
+        '"type":"graph"' in (chunk["choices"][0]["delta"].get("content") or "")
+        for chunk in chunks
+    )
+
+
 @pytest.fixture
 def client():
     engine = _make_engine()

@@ -27,6 +27,10 @@ from openjarvis.server.models import (
 
 router = APIRouter()
 
+# Graph JSON needs room for nodes, edges, and an explanation. The old public
+# limit of 512 tokens frequently stopped midway through a ```viz block.
+_PUBLIC_CHAT_MAX_TOKENS = 2048
+
 
 def _to_messages(chat_messages) -> list[Message]:
     """Convert Pydantic ChatMessage objects to core Message objects."""
@@ -154,7 +158,7 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
         ) > 12000:
             raise HTTPException(status_code=413, detail="Public chat request is too large")
         request_body.model = "beam"
-        request_body.max_tokens = min(max(request_body.max_tokens, 1), 512)
+        request_body.max_tokens = min(max(request_body.max_tokens, 1), _PUBLIC_CHAT_MAX_TOKENS)
     engine = request.app.state.engine
     agent = None if public_chat else getattr(request.app.state, "agent", None)
     model = request_body.model
@@ -247,7 +251,7 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
             )
 
     if public_chat:
-        request_body.max_tokens = min(request_body.max_tokens, 512)
+        request_body.max_tokens = min(request_body.max_tokens, _PUBLIC_CHAT_MAX_TOKENS)
 
     if request_body.stream:
         # When the client passes `tools`, stream the model's raw
