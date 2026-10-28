@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("fastapi", reason="openjarvis[server] not installed")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from openjarvis.server.auth_middleware import AuthMiddleware
@@ -19,6 +19,10 @@ def _make_app(api_key: str) -> FastAPI:
     @app.get("/v1/models")
     async def models():
         return {"models": []}
+
+    @app.post("/v1/chat/completions")
+    async def chat(request: Request):
+        return {"public": getattr(request.state, "public_chat", False)}
 
     @app.get("/health")
     async def health():
@@ -107,3 +111,13 @@ class TestAuthMiddleware:
 
     def test_modules_remain_private_by_default(self, client):
         assert client.get("/v1/modules/list").status_code == 401
+
+    def test_public_chat_allows_anonymous_completion_only(self, monkeypatch):
+        monkeypatch.setenv("OPENJARVIS_PUBLIC_CHAT", "1")
+        client = TestClient(_make_app("oj_sk_test123"))
+        assert client.get("/v1/models").status_code == 200
+        assert client.post("/v1/chat/completions").json() == {"public": True}
+        assert client.post(
+            "/v1/chat/completions", headers={"Authorization": "Bearer oj_sk_test123"}
+        ).json() == {"public": False}
+        assert client.get("/v1/managed-agents").status_code == 401

@@ -17,6 +17,8 @@ services:
         value: /var/data/openjarvis
       - key: OPENJARVIS_PUBLIC_MODULES
         value: 1
+      - key: OPENJARVIS_PUBLIC_CHAT
+        value: 1
       - key: OLLAMA_HOST
         value: https://ollama.com
       - key: OLLAMA_API_KEY

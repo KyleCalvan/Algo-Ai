@@ -29,6 +29,9 @@ COPY --from=builder /usr/local /usr/local
 COPY --from=builder /app /app
 WORKDIR /app
 
+# This deployment serves the learning library and basic chat publicly.
+ENV OPENJARVIS_PUBLIC_MODULES=1 OPENJARVIS_PUBLIC_CHAT=1
+
 EXPOSE 8000
 
 CMD ["python", "-m", "openjarvis.cli", "serve", "--host", "0.0.0.0", "--port", "8000", "--engine", "ollama", "--model", "beam", "--agent", "orchestrator"]

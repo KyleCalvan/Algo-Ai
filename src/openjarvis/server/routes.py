@@ -145,13 +145,23 @@ def _ensure_identity_prompt(messages: list[Message], app_config) -> list[Message
 @router.post("/v1/chat/completions")
 async def chat_completions(request_body: ChatCompletionRequest, request: Request):
     """Handle chat completion requests (streaming and non-streaming)."""
+    public_chat = getattr(request.state, "public_chat", False)
+    if public_chat:
+        if request_body.tools:
+            raise HTTPException(status_code=400, detail="Tools require an API key")
+        if len(request_body.messages) > 20 or sum(
+            len(message.content) for message in request_body.messages
+        ) > 12000:
+            raise HTTPException(status_code=413, detail="Public chat request is too large")
+        request_body.model = "beam"
+        request_body.max_tokens = min(max(request_body.max_tokens, 1), 512)
     engine = request.app.state.engine
-    agent = getattr(request.app.state, "agent", None)
+    agent = None if public_chat else getattr(request.app.state, "agent", None)
     model = request_body.model
 
     # Inject memory context into messages before dispatching
     config = getattr(request.app.state, "config", None)
-    memory_backend = getattr(request.app.state, "memory_backend", None)
+    memory_backend = None if public_chat else getattr(request.app.state, "memory_backend", None)
     if (
         config is not None
         and memory_backend is not None
@@ -236,6 +246,9 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
                 exc_info=True,
             )
 
+    if public_chat:
+        request_body.max_tokens = min(request_body.max_tokens, 512)
+
     if request_body.stream:
         # When the client passes `tools`, stream the model's raw
         # OpenAI-compat function-calling decision directly from the engine
@@ -255,7 +268,7 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
             model,
             request_body,
             complexity_info,
-            trace_store=getattr(request.app.state, "trace_store", None),
+            trace_store=None if public_chat else getattr(request.app.state, "trace_store", None),
             app_config=config,
         )
 
@@ -294,7 +307,7 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
             bus=getattr(request.app.state, "bus", None),
         )
 
-    bus = getattr(request.app.state, "bus", None)
+    bus = None if public_chat else getattr(request.app.state, "bus", None)
     return await _handle_direct(
         engine,
         model,

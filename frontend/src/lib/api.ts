@@ -162,6 +162,7 @@ export async function fetchModels(): Promise<ModelInfo[]> {
   const looksCloud = (m: any) => {
     const id = (m.id || '').toLowerCase();
     return (
+      id === 'beam' ||
       id.includes('/') ||
       id.startsWith('gpt-') ||
       id.startsWith('o1') ||
