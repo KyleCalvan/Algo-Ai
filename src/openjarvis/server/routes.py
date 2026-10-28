@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, AsyncIterator, Callable
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -30,6 +30,40 @@ router = APIRouter()
 # Graph JSON needs room for nodes, edges, and an explanation. The old public
 # limit of 512 tokens frequently stopped midway through a ```viz block.
 _PUBLIC_CHAT_MAX_TOKENS = 2048
+
+
+def _retryable_stream_error(exc: Exception) -> bool:
+    """Retry brief provider outages before any reply text has been sent."""
+    import httpx
+
+    from openjarvis.engine._base import EngineConnectionError
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in (500, 502, 503, 504)
+    return isinstance(exc, (httpx.TransportError, EngineConnectionError))
+
+
+async def _stream_with_retry(
+    open_stream: Callable[[], AsyncIterator[str]],
+) -> AsyncIterator[str]:
+    """Retry one failed stream only if no tokens reached the client."""
+    import asyncio
+
+    for attempt in range(2):
+        sent_content = False
+        try:
+            async for token in open_stream():
+                if token:
+                    sent_content = True
+                yield token
+            return
+        except Exception as exc:
+            if attempt or sent_content or not _retryable_stream_error(exc):
+                raise
+            logging.getLogger("openjarvis.server").warning(
+                "Chat stream failed before output; retrying once: %s", exc
+            )
+            await asyncio.sleep(0.4)
 
 
 def _to_messages(chat_messages) -> list[Message]:
@@ -721,11 +755,11 @@ async def _handle_stream(
             # mis-route the request to a cloud backend (MultiEngine routing
             # confusion), which is detected by checking the routed engine's
             # is_cloud attribute.
-            if use_cloud:
-                token_iter = stream_cloud(
-                    model, messages, req.temperature, req.max_tokens
-                )
-            else:
+            def open_stream() -> AsyncIterator[str]:
+                if use_cloud:
+                    return stream_cloud(
+                        model, messages, req.temperature, req.max_tokens
+                    )
                 # Use engine.stream() by default (preserves mock-engine
                 # compatibility in tests).  Only fall back to stream_local()
                 # when a real MultiEngine would mis-route the local model to a
@@ -743,17 +777,17 @@ async def _handle_stream(
                 except Exception:
                     pass
                 if _use_local_fallback:
-                    token_iter = stream_local(
+                    return stream_local(
                         model, messages, req.temperature, req.max_tokens
                     )
-                else:
-                    token_iter = engine.stream(
-                        messages,
-                        model=model,
-                        temperature=req.temperature,
-                        max_tokens=req.max_tokens,
-                    )
-            async for token in token_iter:
+                return engine.stream(
+                    messages,
+                    model=model,
+                    temperature=req.temperature,
+                    max_tokens=req.max_tokens,
+                )
+
+            async for token in _stream_with_retry(open_stream):
                 full_content += token
                 chunk = ChatCompletionChunk(
                     id=chunk_id,

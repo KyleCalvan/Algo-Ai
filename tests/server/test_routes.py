@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import MagicMock
 
@@ -11,10 +12,62 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from openjarvis.server.app import create_app  # noqa: E402
+from openjarvis.server.routes import _stream_with_retry  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _next_async(iterator):
+    """Drive a ready async generator one step without starting an event loop."""
+    try:
+        iterator.__anext__().send(None)
+    except StopIteration as done:
+        return done.value
+
+
+def test_chat_stream_retries_provider_503_before_content(monkeypatch):
+    import httpx
+
+    async def skip_delay(_seconds):
+        pass
+
+    monkeypatch.setattr(asyncio, "sleep", skip_delay)
+
+    attempts = 0
+
+    async def stream():
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            request = httpx.Request("POST", "https://provider.example/api/chat")
+            response = httpx.Response(503, request=request)
+            raise httpx.HTTPStatusError("unavailable", request=request, response=response)
+        yield "answer"
+
+    assert _next_async(_stream_with_retry(stream)) == "answer"
+    assert attempts == 2
+
+
+def test_chat_stream_does_not_retry_after_partial_content():
+    import httpx
+
+    attempts = 0
+
+    async def stream():
+        nonlocal attempts
+        attempts += 1
+        yield "partial"
+        request = httpx.Request("POST", "https://provider.example/api/chat")
+        response = httpx.Response(503, request=request)
+        raise httpx.HTTPStatusError("unavailable", request=request, response=response)
+
+    iterator = _stream_with_retry(stream)
+    assert _next_async(iterator) == "partial"
+    with pytest.raises(httpx.HTTPStatusError):
+        _next_async(iterator)
+    assert attempts == 1
 
 
 def _make_engine(content="Hello from server", models=None):

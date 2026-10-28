@@ -14,18 +14,36 @@ export async function* streamChat(
   signal?: AbortSignal,
 ): AsyncGenerator<SSEEvent> {
   const base = getBase();
-  const response = await fetch(`${base}/v1/chat/completions`, {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(request),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Chat request failed: ${response.status}`);
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      response = await fetch(`${base}/v1/chat/completions`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(request),
+        signal,
+      });
+    } catch (error) {
+      if (attempt || signal?.aborted) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      continue;
+    }
+    if (attempt === 0 && [502, 503, 504].includes(response.status)) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      continue;
+    }
+    break;
   }
 
-  const reader = response.body!.getReader();
+  if (!response?.ok) {
+    if ([502, 503, 504].includes(response?.status ?? 0)) {
+      throw new Error('The server is temporarily unavailable. Please try again.');
+    }
+    throw new Error(`Chat request failed: ${response?.status ?? 'no response'}`);
+  }
+
+  if (!response.body) throw new Error('The server returned no chat stream. Please try again.');
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 

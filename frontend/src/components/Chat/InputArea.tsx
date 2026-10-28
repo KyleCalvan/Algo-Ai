@@ -408,82 +408,87 @@ export function InputArea() {
           }
         }
       } else {
-      for await (const sseEvent of streamChat(
-        { model: selectedModel, messages: apiMessages, stream: true, temperature, max_tokens: maxTokens },
-        controller.signal,
-      )) {
-        const eventName = sseEvent.event;
+        // A proxy or provider can occasionally end an SSE request before it
+        // delivers any answer text. The request is stateless, so retry once.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          for await (const sseEvent of streamChat(
+            { model: selectedModel, messages: apiMessages, stream: true, temperature, max_tokens: maxTokens },
+            controller.signal,
+          )) {
+            const eventName = sseEvent.event;
 
-        if (eventName === 'agent_turn_start') {
-          setStreamState({ phase: 'Agent thinking...' });
-        } else if (eventName === 'inference_start') {
-          setStreamState({ phase: 'Generating...' });
-          useAppStore.getState().addLogEntry({
-            timestamp: Date.now(), level: 'info', category: 'chat',
-            message: `Generating with ${selectedModel}...`,
-          });
-        } else if (eventName === 'tool_call_start') {
-          try {
-            const data = JSON.parse(sseEvent.data);
-            const tc: ToolCallInfo = {
-              id: generateId(),
-              tool: data.tool,
-              arguments: data.arguments || '',
-              status: 'running',
-            };
-            toolCalls.push(tc);
-            setStreamState({
-              phase: `Calling ${data.tool}...`,
-              activeToolCalls: [...toolCalls],
-            });
-            updateLastAssistant(convId, accumulatedContent, [...toolCalls]);
-            useAppStore.getState().addLogEntry({
-              timestamp: Date.now(), level: 'info', category: 'tool',
-              message: `Calling ${data.tool}(${data.arguments || ''})`,
-            });
-          } catch {}
-        } else if (eventName === 'tool_call_end') {
-          try {
-            const data = JSON.parse(sseEvent.data);
-            const tc = toolCalls.find(
-              (t) => t.tool === data.tool && t.status === 'running',
-            );
-            if (tc) {
-              tc.status = data.success ? 'success' : 'error';
-              tc.latency = data.latency;
-              tc.result = data.result;
-            }
-            setStreamState({
-              phase: 'Generating...',
-              activeToolCalls: [...toolCalls],
-            });
-            updateLastAssistant(convId, accumulatedContent, [...toolCalls]);
-          } catch {}
-        } else {
-          try {
-            const data = JSON.parse(sseEvent.data);
-            const delta = data.choices?.[0]?.delta;
-            if (data.usage) usage = data.usage;
-            if (data.complexity) complexity = data.complexity;
-            if (delta?.content) {
-              if (!ttftMs) ttftMs = Date.now() - startTime;
-              accumulatedContent += delta.content;
-              setStreamState({ content: accumulatedContent, phase: '' });
-
-              const now = Date.now();
-              if (now - lastFlush >= 80) {
-                updateLastAssistant(
-                  convId,
-                  accumulatedContent,
-                  toolCalls.length > 0 ? [...toolCalls] : undefined,
+            if (eventName === 'agent_turn_start') {
+              setStreamState({ phase: 'Agent thinking...' });
+            } else if (eventName === 'inference_start') {
+              setStreamState({ phase: 'Generating...' });
+              useAppStore.getState().addLogEntry({
+                timestamp: Date.now(), level: 'info', category: 'chat',
+                message: `Generating with ${selectedModel}...`,
+              });
+            } else if (eventName === 'tool_call_start') {
+              try {
+                const data = JSON.parse(sseEvent.data);
+                const tc: ToolCallInfo = {
+                  id: generateId(),
+                  tool: data.tool,
+                  arguments: data.arguments || '',
+                  status: 'running',
+                };
+                toolCalls.push(tc);
+                setStreamState({
+                  phase: `Calling ${data.tool}...`,
+                  activeToolCalls: [...toolCalls],
+                });
+                updateLastAssistant(convId, accumulatedContent, [...toolCalls]);
+                useAppStore.getState().addLogEntry({
+                  timestamp: Date.now(), level: 'info', category: 'tool',
+                  message: `Calling ${data.tool}(${data.arguments || ''})`,
+                });
+              } catch {}
+            } else if (eventName === 'tool_call_end') {
+              try {
+                const data = JSON.parse(sseEvent.data);
+                const tc = toolCalls.find(
+                  (t) => t.tool === data.tool && t.status === 'running',
                 );
-                lastFlush = now;
-              }
+                if (tc) {
+                  tc.status = data.success ? 'success' : 'error';
+                  tc.latency = data.latency;
+                  tc.result = data.result;
+                }
+                setStreamState({
+                  phase: 'Generating...',
+                  activeToolCalls: [...toolCalls],
+                });
+                updateLastAssistant(convId, accumulatedContent, [...toolCalls]);
+              } catch {}
+            } else {
+              try {
+                const data = JSON.parse(sseEvent.data);
+                const delta = data.choices?.[0]?.delta;
+                if (data.usage) usage = data.usage;
+                if (data.complexity) complexity = data.complexity;
+                if (delta?.content) {
+                  if (!ttftMs) ttftMs = Date.now() - startTime;
+                  accumulatedContent += delta.content;
+                  setStreamState({ content: accumulatedContent, phase: '' });
+
+                  const now = Date.now();
+                  if (now - lastFlush >= 80) {
+                    updateLastAssistant(
+                      convId,
+                      accumulatedContent,
+                      toolCalls.length > 0 ? [...toolCalls] : undefined,
+                    );
+                    lastFlush = now;
+                  }
+                }
+                if (data.choices?.[0]?.finish_reason === 'stop') break;
+              } catch {}
             }
-            if (data.choices?.[0]?.finish_reason === 'stop') break;
-          } catch {}
+          }
+          if (accumulatedContent) break;
         }
-      }
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
