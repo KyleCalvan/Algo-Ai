@@ -32,6 +32,18 @@ def _make_app(api_key: str) -> FastAPI:
     async def metrics():
         return {"requests": 0}
 
+    @app.get("/v1/modules/list")
+    async def modules():
+        return []
+
+    @app.get("/v1/modules/mod_123456789a")
+    async def module():
+        return {"source": "lesson"}
+
+    @app.post("/v1/modules/import/text")
+    async def import_module():
+        return {"status": "imported"}
+
     return app
 
 
@@ -84,3 +96,14 @@ class TestAuthMiddleware:
         resp = client.get("/v1/models")
         assert resp.status_code == 200
         assert client.get("/metrics").status_code == 200
+
+    def test_public_modules_are_read_only(self, monkeypatch):
+        monkeypatch.setenv("OPENJARVIS_PUBLIC_MODULES", "1")
+        client = TestClient(_make_app("oj_sk_test123"))
+        assert client.get("/v1/modules/list").status_code == 200
+        assert client.get("/v1/modules/mod_123456789a").status_code == 200
+        assert client.post("/v1/modules/import/text").status_code == 401
+        assert client.get("/v1/models").status_code == 401
+
+    def test_modules_remain_private_by_default(self, client):
+        assert client.get("/v1/modules/list").status_code == 401

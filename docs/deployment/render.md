@@ -21,8 +21,8 @@ OpenJarvis serves the React website and its Python API from one Render web servi
 3. When Render asks for secrets, enter the Ollama key as `OLLAMA_API_KEY` and the separate OpenJarvis key as `OPENJARVIS_API_KEY`.
 4. Review the paid Starter web service and 1 GB persistent disk before creating them. The disk keeps the SQLite databases and learning library when the service restarts or redeploys. A free web service cannot attach a persistent disk.
 5. Deploy. Wait for the `/health` check to pass, then open the assigned `https://...onrender.com` URL.
-6. In the app, open **Settings > Connection** and paste the same OpenJarvis key into **API key**. Leave **API URL** empty because the frontend and API share the same domain. Reload the page.
+6. Open the assigned site. The learning library is readable without a browser API key. To use protected features such as chat or module import, open **Settings > Connection** and paste the OpenJarvis key into **API key**. Leave **API URL** empty because the frontend and API share the same domain.
 
 The first deploy starts with an empty learning library. Import your module text or files through the app. To transfer the existing local library and SQLite data, arrange a private migration to the mounted `/var/data/openjarvis` directory; never add these files to the public website or repository. Browser conversations and settings remain in that browser's local storage and do not move automatically.
 
-The server protects `/v1/*` and `/api/*` with the OpenJarvis key, but the website shell itself is publicly reachable. Treat the key as a single-user credential. If you intend to allow other people to use the app, add proper user accounts and per-user data isolation before sharing the URL.
+With `OPENJARVIS_PUBLIC_MODULES=1`, anyone with the site URL can read the module list and full lesson content. The server still protects chat, imports, deletions, and other `/v1/*` and `/api/*` actions with the OpenJarvis key. Treat the key as a single-user credential. If you intend to allow other people to use protected features, add proper user accounts and per-user data isolation before sharing the URL.

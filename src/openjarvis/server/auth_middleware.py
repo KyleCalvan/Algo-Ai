@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -23,9 +24,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, api_key: str = "") -> None:  # noqa: ANN001
         super().__init__(app)
         self._api_key = api_key or os.environ.get("OPENJARVIS_API_KEY", "")
+        self._public_modules = os.environ.get("OPENJARVIS_PUBLIC_MODULES") == "1"
 
     async def dispatch(self, request: Request, call_next):  # noqa: ANN001
-        if self._api_key and self._requires_auth(request.url.path):
+        if (
+            self._api_key
+            and self._requires_auth(request.url.path)
+            and not self._public_module_read(request.method, request.url.path)
+        ):
             auth = request.headers.get("Authorization", "")
             if not auth:
                 return JSONResponse(
@@ -42,6 +48,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     status_code=401,
                 )
         return await call_next(request)
+
+    def _public_module_read(self, method: str, path: str) -> bool:
+        """Expose only library reads when public modules are enabled."""
+        if not self._public_modules or method != "GET":
+            return False
+        if path == "/v1/modules/list":
+            return True
+        return re.fullmatch(r"/v1/modules/mod_[0-9a-f]{10}(?:/content)?", path) is not None
 
     @staticmethod
     def _requires_auth(path: str) -> bool:
