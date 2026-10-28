@@ -35,7 +35,9 @@ export default defineConfig({
   ],
   build: {
     outDir: '../src/openjarvis/server/static',
-    emptyOutDir: true,
+    // Open tabs can still reference hashes from an earlier build.
+    // Keep those immutable assets available while publishing the new entrypoint.
+    emptyOutDir: false,
     minify: 'esbuild',
     rollupOptions: {
       output: {

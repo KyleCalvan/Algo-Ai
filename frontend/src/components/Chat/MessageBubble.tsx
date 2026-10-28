@@ -11,8 +11,9 @@ import { ToolCallCard } from './ToolCallCard';
 import { ResearchTimeline } from './ResearchTimeline';
 import { rehypeCitations } from '../../lib/rehype-citations';
 import { XRayFooter } from './XRayFooter';
-import type { ChatMessage } from '../../types';
-
+import type { ChatMessage, StreamState } from '../../types';
+import { VisualizationRenderer } from '../Visualizations/VisualizationRenderer';
+import type { VisualizationBlock } from '../../types/visualization';
 function stripThinkTags(text: string): string {
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>\s*/gi, '');
   cleaned = cleaned.replace(/^[\s\S]*?<\/think>\s*/i, '');
@@ -22,6 +23,8 @@ function stripThinkTags(text: string): string {
 interface Props {
   message: ChatMessage;
   isLive?: boolean;
+  isStreaming?: boolean;
+  streamState?: StreamState;
 }
 
 function getTextContent(node: any): string {
@@ -175,6 +178,21 @@ export function MessageBubble({ message, isLive = false }: Props) {
           >
             {cleanContent}
           </ReactMarkdown>
+        </div>
+      )}
+
+      {/* Inline Visualizations (Real-Time Visual AI Tutor) */}
+      {message.visualizations && message.visualizations.length > 0 && (
+        <div className="visualizations-container mt-3 flex flex-col gap-4">
+          {message.visualizations.map((viz: VisualizationBlock) => (
+            <div key={viz.id} className="visualization-block my-2">
+              <VisualizationRenderer
+                block={viz}
+                height={400}
+                className="w-full"
+              />
+            </div>
+          ))}
         </div>
       )}
 

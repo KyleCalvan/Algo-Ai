@@ -16,11 +16,12 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+ "paths": {
+  "@/*": ["./src/*"]
+}
   },
   "include": ["src"],
-  "exclude": ["src/components/Desktop"]
+  "exclude": ["src/components/Desktop", "node_modules"]
 }

@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router';
 import { ApprovalBell } from './ApprovalBell';
 import { Sidebar } from './Sidebar/Sidebar';
 import { SystemPulse } from './SystemPulse';
+import { AssistantPanel } from './Assistant/AssistantPanel';
 import { useAppStore } from '../lib/store';
 import { checkHealth } from '../lib/api';
 
@@ -64,10 +65,18 @@ export function Layout() {
           />
         )}
         <main className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden" style={{ background: 'transparent' }}>
-          <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-[2]">
+                  <div className="flex-1 flex flex-col min-w-0 min-h-0 relative z-[2]">
             <Outlet />
           </div>
         </main>
+
+        {/* Assistant Panel - floating on right */}
+        <AssistantPanel
+          isOpen={useAppStore((s) => s.assistantOpen)}
+          minimized={useAppStore((s) => s.assistantMinimized)}
+          onClose={() => useAppStore.getState().setAssistantOpen(false)}
+          onMinimize={() => useAppStore.getState().setAssistantMinimized(!useAppStore.getState().assistantMinimized)}
+        />
       </div>
     </div>
   );

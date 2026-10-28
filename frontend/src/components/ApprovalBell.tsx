@@ -119,7 +119,7 @@ export function ApprovalBell() {
           >
             <div className="flex items-center gap-2">
               <Bell size={13} style={{ color: 'var(--color-accent)' }} />
-              <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+              <span className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>
                 Agent Approvals
               </span>
             </div>
@@ -141,7 +141,7 @@ export function ApprovalBell() {
             {count === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 gap-2">
                 <CheckCircle size={26} style={{ color: 'var(--color-text-secondary)', opacity: 0.35 }} />
-                <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                <span className="text-base" style={{ color: 'var(--color-text-secondary)' }}>
                   No pending approvals
                 </span>
               </div>
@@ -228,7 +228,7 @@ export function ApprovalBell() {
                       <button
                         onClick={() => handleApprove(action.id)}
                         disabled={isLoading}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-opacity cursor-pointer disabled:opacity-40"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-base font-semibold transition-opacity cursor-pointer disabled:opacity-40"
                         style={{
                           background: 'color-mix(in srgb, var(--color-success) 12%, transparent)',
                           color: 'var(--color-success)',
@@ -241,7 +241,7 @@ export function ApprovalBell() {
                       <button
                         onClick={() => handleDeny(action.id)}
                         disabled={isLoading}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-opacity cursor-pointer disabled:opacity-40"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-base font-semibold transition-opacity cursor-pointer disabled:opacity-40"
                         style={{
                           background: 'color-mix(in srgb, var(--color-error) 12%, transparent)',
                           color: 'var(--color-error)',

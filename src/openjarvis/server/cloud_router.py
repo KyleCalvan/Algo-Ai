@@ -27,6 +27,8 @@ _OPENAI_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
 _ANTHROPIC_PREFIXES = ("claude-",)
 _GOOGLE_PREFIXES = ("gemini-",)
 _MINIMAX_PREFIXES = ("MiniMax-",)
+_DEEPSEEK_PREFIXES = ("deepseek-",)
+_CODEX_PREFIXES = ("codex/",)
 
 # HuggingFace orgs that host local-only quantised models — never route to cloud.
 _LOCAL_HF_ORGS = (
@@ -55,6 +57,7 @@ def _load_keys() -> dict[str, str]:
         "GOOGLE_API_KEY",
         "OPENROUTER_API_KEY",
         "MINIMAX_API_KEY",
+        "DEEPSEEK_API_KEY",
     ):
         val = os.environ.get(name)
         if val:
@@ -72,6 +75,10 @@ def get_provider(model: str) -> str | None:
         return "google"
     if any(model.startswith(p) for p in _MINIMAX_PREFIXES):
         return "minimax"
+    if any(model.startswith(p) for p in _DEEPSEEK_PREFIXES):
+        return "deepseek"
+    if any(model.startswith(p) for p in _CODEX_PREFIXES):
+        return "codex"
     if any(model.startswith(org) for org in _LOCAL_HF_ORGS):
         return None  # local model, never route to cloud
     if "/" in model:  # openrouter format: "meta-llama/llama-3-8b"
@@ -256,26 +263,41 @@ async def _stream_google(
         f"{model}:streamGenerateContent?alt=sse&key={api_key}"
     )
 
+    import asyncio as _asyncio
     async with httpx.AsyncClient(timeout=180) as client:
-        async with client.stream("POST", url, json=payload) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: "):
+        for attempt in range(3):
+            try:
+                async with client.stream("POST", url, json=payload) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:].strip()
+                        try:
+                            chunk = json.loads(data)
+                            parts = (
+                                chunk.get("candidates", [{}])[0]
+                                .get("content", {})
+                                .get("parts", [])
+                            )
+                            for part in parts:
+                                text = part.get("text", "")
+                                if text:
+                                    yield text
+                        except Exception:
+                            pass
+                return
+            except httpx.HTTPStatusError as exc:
+                status = getattr(exc.response, "status_code", None)
+                if status == 429 and attempt < 2:
+                    retry_after = exc.response.headers.get("retry-after")
+                    try:
+                        delay = float(retry_after) if retry_after else (2 ** (attempt + 1))
+                    except (TypeError, ValueError):
+                        delay = 2 ** (attempt + 1)
+                    await _asyncio.sleep(min(delay, 20.0))
                     continue
-                data = line[6:].strip()
-                try:
-                    chunk = json.loads(data)
-                    parts = (
-                        chunk.get("candidates", [{}])[0]
-                        .get("content", {})
-                        .get("parts", [])
-                    )
-                    for part in parts:
-                        text = part.get("text", "")
-                        if text:
-                            yield text
-                except Exception:
-                    pass
+                raise
 
 
 # ---------------------------------------------------------------------------
@@ -337,6 +359,88 @@ async def list_local_models() -> list[str]:
         return []
 
 
+async def _fetch_provider_models(url: str, headers: dict[str, str], parse) -> list[str]:
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            return parse(data)
+    except Exception:
+        return []
+
+
+async def list_cloud_models() -> list[str]:
+    # Only Ollama Cloud's configured beam model is supported; no other
+    # providers/cloud models should be surfaced.
+    return []
+    discovered: list[str] = []
+
+    # OpenAI / OpenAI-compatible model catalog
+    openai_key = keys.get("OPENAI_API_KEY")
+    if openai_key:
+        ids = await _fetch_provider_models(
+            "https://api.openai.com/v1/models",
+            {"Authorization": f"Bearer {openai_key}"},
+            lambda d: [m.get("id", "") for m in d.get("data", []) if m.get("id")],
+        )
+        # Keep OpenAI-looking models (filters unrelated junk if any).
+        discovered.extend([i for i in ids if any(i.startswith(p) for p in _OPENAI_PREFIXES)])
+
+    anthropic_key = keys.get("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        ids = await _fetch_provider_models(
+            "https://api.anthropic.com/v1/models?limit=100",
+            {"x-api-key": anthropic_key, "anthropic-version": "2023-06-01"},
+            lambda d: [m.get("id", "") for m in d.get("data", []) if m.get("id")],
+        )
+        discovered.extend(ids)
+
+    gemini_key = keys.get("GEMINI_API_KEY") or keys.get("GOOGLE_API_KEY")
+    if gemini_key:
+        ids = await _fetch_provider_models(
+            "https://generativelanguage.googleapis.com/v1beta/models"
+            f"?key={gemini_key}&pageSize=1000",
+            {},
+            lambda d: [
+                m.get("name", "").split("/")[-1]
+                for m in d.get("models", [])
+                if m.get("name") and any(cfg in (m.get("supportedGenerationMethods") or [])
+                      for cfg in ("generateContent",))
+                ],
+        )
+        discovered.extend(ids)
+
+    openrouter_key = keys.get("OPENROUTER_API_KEY")
+    if openrouter_key:
+        ids = await _fetch_provider_models(
+            "https://openrouter.ai/api/v1/models",
+            {"Authorization": f"Bearer {openrouter_key}"},
+            lambda d: [m.get("id", "") for m in d.get("data", []) if m.get("id")],
+        )
+        discovered.extend(ids)
+
+    minimax_key = keys.get("MINIMAX_API_KEY")
+    if minimax_key:
+        ids = await _fetch_provider_models(
+            "https://api.minimax.io/v1/models",
+            {"Authorization": f"Bearer {minimax_key}"},
+            lambda d: [m.get("id", "") for m in d.get("data", []) if m.get("id")],
+        )
+        discovered.extend(ids)
+
+    deepseek_key = keys.get("DEEPSEEK_API_KEY")
+    if deepseek_key:
+        ids = await _fetch_provider_models(
+            "https://api.deepseek.com/v1/models",
+            {"Authorization": f"Bearer {deepseek_key}"},
+            lambda d: [m.get("id", "") for m in d.get("data", []) if m.get("id")],
+        )
+        discovered.extend(ids)
+
+    return [m for m in discovered if m]
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -392,6 +496,21 @@ async def stream_cloud(
             max_tokens,
             base_url="https://api.minimax.io/v1",
             api_key_name="MINIMAX_API_KEY",
+        ):
+            yield token
+
+    elif provider == "deepseek":
+        keys = _load_keys()
+        api_key = keys.get("DEEPSEEK_API_KEY", "")
+        if not api_key:
+            raise ValueError("DEEPSEEK_API_KEY not set — add it in the Cloud Models tab")
+        async for token in _stream_openai(
+            model,
+            messages,
+            temperature,
+            max_tokens,
+            base_url="https://api.deepseek.com/v1",
+            api_key_name="DEEPSEEK_API_KEY",
         ):
             yield token
 

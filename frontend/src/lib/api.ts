@@ -131,18 +131,52 @@ export async function getSetupStatus(): Promise<SetupStatus | null> {
 // ---------------------------------------------------------------------------
 
 export async function fetchModels(): Promise<ModelInfo[]> {
+  const merged: ModelInfo[] = [];
+  const seen = new Set<string>();
+
   if (isTauri()) {
     try {
       const result = await tauriInvoke<{ data?: ModelInfo[] }>('fetch_models');
-      return result?.data || [];
+      for (const m of result?.data || []) {
+        if (!seen.has(m.id)) { seen.add(m.id); merged.push(m); }
+      }
     } catch {
-      // Fall through to fetch
+      // Fall through
     }
   }
-  const res = await apiFetch(`/v1/models`);
-  if (!res.ok) throw new Error(`Failed to fetch models: ${res.status}`);
-  const data = await res.json();
-  return data.data || [];
+
+  try {
+    const res = await apiFetch(`/v1/models`);
+    if (res.ok) {
+      const data = await res.json();
+      for (const m of (data.data || [])) {
+        if (!seen.has(m.id)) { seen.add(m.id); merged.push(m); }
+      }
+    }
+  } catch {
+    // Keep what we have.
+  }
+
+  // Keep only provider-backed/cloud models in the switcher (hide local
+  // Ollama entries) regardless of the API's default owned_by value.
+  const looksCloud = (m: any) => {
+    const id = (m.id || '').toLowerCase();
+    return (
+      id.includes('/') ||
+      id.startsWith('gpt-') ||
+      id.startsWith('o1') ||
+      id.startsWith('o3') ||
+      id.startsWith('o4') ||
+      id.startsWith('chatgpt') ||
+      id.startsWith('claude') ||
+      id.startsWith('gemini') ||
+      id.startsWith('gemma') ||
+      id.startsWith('minimax') ||
+      id.startsWith('deepseek') ||
+      id.startsWith('codex')
+    );
+  };
+  return merged.filter(looksCloud);
 }
 
 export async function fetchRecommendedModel(): Promise<{ model: string; reason: string }> {
@@ -1023,6 +1057,49 @@ export async function getMemoryConfig(): Promise<MemoryConfig> {
   const res = await apiFetch(`/v1/memory/config`);
   if (!res.ok) throw new Error('Failed to fetch memory config');
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Module Memory Library
+// ---------------------------------------------------------------------------
+
+export interface LearningModule {
+  id: string;
+  title: string;
+  subject?: string;
+  topics?: string[];
+  summary?: string;
+  added_at?: string;
+  updated_at?: string;
+  import_status?: string;
+}
+
+export async function fetchModules(query?: string): Promise<LearningModule[]> {
+  const qs = query ? `?q=${encodeURIComponent(query)}` : '';
+  const res = await apiFetch(`/v1/modules/list${qs}`);
+  if (!res.ok) throw new Error(`Failed to list modules: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchModule(id: string): Promise<LearningModule & { source?: string; content_path?: string }> {
+  const res = await apiFetch(`/v1/modules/${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`Failed to get module: ${res.status}`);
+  return res.json();
+}
+
+export async function importModuleText(body: { title: string; subject?: string; content: string }): Promise<LearningModule> {
+  const res = await apiFetch(`/v1/modules/import/text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: body.title, subject: body.subject || 'general', content: body.content }),
+  });
+  if (!res.ok) throw new Error(await (async () => (await res.json().catch(() => ({ detail: res.statusText }))).detail || res.statusText)());
+  return res.json();
+}
+
+export async function deleteModule(id: string): Promise<void> {
+  const res = await apiFetch(`/v1/modules/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete module: ${res.status}`);
 }
 
 // ---------------------------------------------------------------------------

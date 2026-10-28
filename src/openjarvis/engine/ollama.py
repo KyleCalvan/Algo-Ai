@@ -49,13 +49,44 @@ class OllamaEngine(InferenceEngine):
         host: str | None = None,
         *,
         timeout: float = 1800.0,
+        api_key: str | None = None,
     ) -> None:
-        # Priority: explicit host (from config.toml) > OLLAMA_HOST env var > default
+        # Resolve host: explicit > env > (cloud if key present) > localhost default
         if host is None:
             env_host = os.environ.get("OLLAMA_HOST")
-            host = env_host or self._DEFAULT_HOST
+            if env_host and not env_host.strip().startswith("0.0.0.0") and (env_host.startswith("http://") or env_host.startswith("https://")):
+                host = env_host
+            else:
+                if api_key is None:
+                    api_key = os.environ.get("OLLAMA_API_KEY") or os.environ.get("OPENJARVIS_OLLAMA_API_KEY")
+                if not api_key:
+                    try:
+                        from pathlib import Path
+                        _sk = Path.home() / ".openjarvis" / "secrets" / "ollama_api_key.txt"
+                        if _sk.exists():
+                            api_key = _sk.read_text(encoding="utf-8").strip() or None
+                    except Exception:
+                        api_key = None
+                if api_key:
+                    host = "https://ollama.com"
+                else:
+                    host = self._DEFAULT_HOST
         self._host = host.rstrip("/")
-        self._client = httpx.Client(base_url=self._host, timeout=timeout)
+        if api_key is None:
+            api_key = os.environ.get("OLLAMA_API_KEY") or os.environ.get("OPENJARVIS_OLLAMA_API_KEY")
+            if not api_key:
+                try:
+                    from pathlib import Path
+                    _sk = Path.home() / ".openjarvis" / "secrets" / "ollama_api_key.txt"
+                    if _sk.exists():
+                        api_key = _sk.read_text(encoding="utf-8").strip() or None
+                except Exception:
+                    api_key = None
+        _headers = {}
+        if api_key:
+            _headers["Authorization"] = "Bearer " + api_key
+        self._api_key = api_key
+        self._client = httpx.Client(base_url=self._host, timeout=timeout, headers=_headers)
         # Last stream usage — captured from Ollama's final chunk
         self._last_stream_usage: Dict[str, int] = {}
 
@@ -404,7 +435,13 @@ class OllamaEngine(InferenceEngine):
             )
             return []
         data = resp.json()
-        return [m["name"] for m in data.get("models", [])]
+        models = [m["name"] for m in data.get("models", [])]
+        # Only expose the configured Ollama Cloud model (beam)
+        if self._api_key:
+            models = [m for m in models if m == "beam" or m.startswith("beam:")]
+            if not models:
+                models = ["beam"]
+        return models
 
     def health(self) -> bool:
         try:

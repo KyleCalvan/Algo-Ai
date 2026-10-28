@@ -115,6 +115,64 @@ export interface LiveEnergyMetrics {
   duration_s: number;
 }
 
+// --- Visualization Types ---
+// Re-export from visualization.ts
+import type {
+  VisualizationBlock,
+  VisualizationSpec,
+  GraphSpec,
+  ChartSpec,
+  AlgorithmSpec,
+  MathSpec,
+  TableSpec,
+  DiagramSpec,
+  VisualizationControls,
+  GraphNode,
+  GraphEdge,
+  GraphNodeData,
+  ChartDataPoint,
+  ChartSeries,
+  AlgorithmStep,
+  AlgorithmState,
+  MathExpression,
+  StreamingBlock,
+  ParsedVisualizationBlock,
+  VisualizationInteraction,
+  VisualizationType,
+  AlgorithmType,
+  GraphLayout,
+  GraphAlgorithm,
+  ChartType,
+} from './visualization';
+
+export type {
+  VisualizationBlock,
+  VisualizationSpec,
+  GraphSpec,
+  ChartSpec,
+  AlgorithmSpec,
+  MathSpec,
+  TableSpec,
+  DiagramSpec,
+  VisualizationControls,
+  GraphNode,
+  GraphEdge,
+  GraphNodeData,
+  ChartDataPoint,
+  ChartSeries,
+  AlgorithmStep,
+  AlgorithmState,
+  MathExpression,
+  StreamingBlock,
+  ParsedVisualizationBlock,
+  VisualizationInteraction,
+  VisualizationType,
+  AlgorithmType,
+  GraphLayout,
+  GraphAlgorithm,
+  ChartType,
+};
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -127,6 +185,8 @@ export interface ChatMessage {
   usage?: TokenUsage;
   telemetry?: MessageTelemetry;
   audio?: { url: string };
+  // Visual AI Tutor
+  visualizations?: VisualizationBlock[];
 }
 
 export interface Conversation {

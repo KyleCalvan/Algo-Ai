@@ -5,6 +5,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import App from './App';
 import { initApiBase } from './lib/api';
 import { initAnalytics } from './lib/analytics';
+import { installAssetRecovery } from './lib/asset-recovery';
 import './index.css';
 
 function applyTheme() {
@@ -23,6 +24,7 @@ function applyTheme() {
 }
 
 applyTheme();
+installAssetRecovery();
 
 // Fetch the API base URL from the Tauri backend before rendering.
 // This ensures JARVIS_PORT is defined in one place (the Rust backend).

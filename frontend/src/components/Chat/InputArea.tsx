@@ -3,7 +3,7 @@ import { Send, Square, Paperclip, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore, generateId } from '../../lib/store';
 import { streamChat, streamResearch } from '../../lib/sse';
-import { fetchSavings, getBase } from '../../lib/api';
+import { fetchSavings, getBase, fetchModels } from '../../lib/api';
 import { listConnectors, getSyncStatus } from '../../lib/connectors-api';
 import { MicButton } from './MicButton';
 import { useSpeech } from '../../hooks/useSpeech';
@@ -76,12 +76,41 @@ function useResearchCorpusSync(enabled: boolean): {
 
 export function InputArea() {
   const [input, setInput] = useState('');
+  const [modelFilter, setModelFilter] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeId = useAppStore((s) => s.activeId);
   const selectedModel = useAppStore((s) => s.selectedModel);
+  const models = useAppStore((s) => s.models);
+
+  const providerGroup = (modelId: string, ownedBy?: string) => {
+    const owner = (ownedBy || '').trim();
+    if (owner && owner !== 'system') return owner[0].toUpperCase() + owner.slice(1);
+    if (modelId.includes('/')) return 'OpenRouter';
+    if (modelId.startsWith('gemini') || modelId.startsWith('gemma')) return 'Google';
+    if (modelId.startsWith('claude')) return 'Anthropic';
+    if (modelId.startsWith('gpt-') || modelId.startsWith('o1') || modelId.startsWith('o3') || modelId.startsWith('o4') || modelId.startsWith('chatgpt')) return 'OpenAI';
+    if (modelId.startsWith('MiniMax')) return 'MiniMax';
+    if (modelId.startsWith('deepseek')) return 'DeepSeek';
+    if (modelId.startsWith('codex')) return 'Codex';
+    return 'Ollama / Local';
+  };
+
+  const visibleModels = (models.length > 0 ? models.filter((m: any) => m.id === 'beam') : [{ id: selectedModel || 'beam', object: '', created: 0, owned_by: '' }])
+    .filter((model: any) => {
+      const query = modelFilter.trim().toLowerCase();
+      return model.id.toLowerCase().includes(query) || providerGroup(model.id, model.owned_by).toLowerCase().includes(query);
+    });
+  const groupedModels = (visibleModels.length > 0 ? visibleModels : (models.length > 0 ? models.filter((m: any) => m.id === 'beam') : [{ id: selectedModel || 'beam', object: '', created: 0, owned_by: '' }]))
+    .reduce<Record<string, typeof models>>((groups, model: any) => {
+      const group = providerGroup(model.id, model.owned_by);
+      if (!groups[group]) groups[group] = [];
+      groups[group].push(model);
+      return groups;
+    }, {});
+  const setSelectedModel = useAppStore((s) => s.setSelectedModel);
   const streamState = useAppStore((s) => s.streamState);
   const messages = useAppStore((s) => s.messages);
   const speechEnabled = useAppStore((s) => s.settings.speechEnabled);
@@ -95,6 +124,7 @@ export function InputArea() {
   const modelLoading = useAppStore((s) => s.modelLoading);
   const deepResearch = useAppStore((s) => s.deepResearch);
   const setDeepResearch = useAppStore((s) => s.setDeepResearch);
+  const teachingMode = useAppStore((s) => s.settings.teachingMode ?? true);
   const corpusSync = useResearchCorpusSync(deepResearch);
 
   const {
@@ -127,6 +157,21 @@ export function InputArea() {
     : !speechAvailable ? 'no-backend'
     : streamState.isStreaming ? 'streaming'
     : undefined;
+
+  useEffect(() => {
+    let canceled = false;
+    const load = async () => {
+      try {
+        const next = await fetchModels();
+        if (!canceled && next.length) {
+          useAppStore.getState().setModels(next);
+        }
+      } catch {}
+    };
+    load();
+    const interval = setInterval(load, 12000);
+    return () => { canceled = true; clearInterval(interval); };
+  }, []);
 
   useEffect(() => {
     if (speechError) {
@@ -546,6 +591,20 @@ export function InputArea() {
     <div className="px-4 pb-4 pt-2" style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%' }}>
       <div className="mb-2 flex flex-col gap-1">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => useAppStore.getState().updateSettings({ teachingMode: !teachingMode })}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+            aria-pressed={teachingMode}
+            style={{
+              background: teachingMode ? 'var(--color-accent-subtle)' : 'transparent',
+              border: `1px solid ${teachingMode ? 'var(--color-accent)' : 'var(--color-border)'}`,
+              color: teachingMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+            }}
+            title={teachingMode ? 'Teaching Mode: on' : 'Teaching Mode: off'}
+          >
+            ✨ Teaching
+          </button>
           <button
             type="button"
             onClick={() => setDeepResearch(!deepResearch)}

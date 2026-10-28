@@ -10,13 +10,14 @@ import {
   PanelLeft,
   Cpu,
   Rocket,
-  Bot,
+  Home,
   Sun,
   Moon,
   Monitor,
   Loader2,
   ScrollText,
   Database,
+  BookOpen,
 } from 'lucide-react';
 import { ConversationList } from './ConversationList';
 import { useAppStore } from '../../lib/store';
@@ -53,10 +54,10 @@ export function Sidebar() {
   };
 
   const navItems = [
-    { path: '/', icon: MessageSquare, label: 'Chat' },
-    { path: '/dashboard', icon: BarChart3, label: 'Dashboard' },
+    { path: '/landing', icon: Home, label: 'Home' },
+    { path: '/chat', icon: MessageSquare, label: 'Chat' },
     { path: '/data-sources', icon: Database, label: 'Data Sources' },
-    { path: '/agents', icon: Bot, label: 'Agents' },
+    { path: '/modules', icon: BookOpen, label: 'Modules' },
     { path: '/logs', icon: ScrollText, label: 'Logs' },
     { path: '/settings', icon: Settings, label: 'Settings' },
     { path: '/get-started', icon: Rocket, label: 'Get Started' },

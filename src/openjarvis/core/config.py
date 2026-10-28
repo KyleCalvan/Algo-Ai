@@ -1553,6 +1553,13 @@ class DigestConfig:
     )
 
 
+@dataclass(slots=True)
+class VisualTutorConfig:
+    """Enable the Real-Time Visual AI Tutor protocol in managed chats."""
+
+    enabled: bool = True
+
+
 @dataclass
 class JarvisConfig:
     """Top-level configuration for OpenJarvis."""
@@ -1585,7 +1592,9 @@ class JarvisConfig:
     compression: CompressionConfig = field(default_factory=CompressionConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     digest: DigestConfig = field(default_factory=DigestConfig)
+    visual_tutor: VisualTutorConfig = field(default_factory=VisualTutorConfig)
     proactive: ProactiveConfig = field(default_factory=ProactiveConfig)
+    visual_tutor: VisualTutorConfig = field(default_factory=VisualTutorConfig)
     mining: Optional["MiningConfig"] = None
 
     @property

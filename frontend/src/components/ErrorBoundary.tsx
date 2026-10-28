@@ -1,6 +1,7 @@
 import { Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { isAssetLoadError, recoverAssetLoad } from '../lib/asset-recovery';
 
 interface Props {
   children: ReactNode;
@@ -22,11 +23,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (recoverAssetLoad(error)) return;
     console.error('ErrorBoundary caught:', error, info);
   }
 
   render() {
     if (this.state.hasError) {
+      const assetError = isAssetLoadError(this.state.error);
       return (
         <div className="flex items-center justify-center h-full p-8" style={{ background: 'var(--color-bg)' }}>
           <div className="text-center max-w-sm">
@@ -37,18 +40,18 @@ export class ErrorBoundary extends Component<Props, State> {
               <AlertTriangle size={24} />
             </div>
             <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text)' }}>
-              Something went wrong
+              {assetError ? 'The app has been updated' : 'Something went wrong'}
             </h2>
             <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-              {this.state.error?.message || 'An unexpected error occurred.'}
+              {assetError ? 'Reload to get the latest version of this page. Your saved conversations and modules will stay available.' : this.state.error?.message || 'An unexpected error occurred.'}
             </p>
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() => assetError ? window.location.reload() : this.setState({ hasError: false, error: null })}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
               style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
             >
               <RotateCcw size={14} />
-              Try again
+              {assetError ? 'Reload app' : 'Try again'}
             </button>
           </div>
         </div>

@@ -29,43 +29,11 @@ interface CloudProvider {
 
 const CLOUD_PROVIDERS: CloudProvider[] = [
   {
-    name: 'OpenAI',
-    envKey: 'OPENAI_API_KEY',
-    storageKey: 'openjarvis-openai-key',
+    name: 'Ollama Cloud',
+    envKey: 'OLLAMA_API_KEY',
+    storageKey: 'openjarvis-ollama-api-key',
     models: [
-      { id: 'gpt-4o', desc: 'GPT-4o — fast, multimodal' },
-      { id: 'gpt-4o-mini', desc: 'GPT-4o Mini — cheap, fast' },
-      { id: 'o3-mini', desc: 'o3-mini — reasoning' },
-    ],
-  },
-  {
-    name: 'Anthropic',
-    envKey: 'ANTHROPIC_API_KEY',
-    storageKey: 'openjarvis-anthropic-key',
-    models: [
-      { id: 'claude-sonnet-4-6', desc: 'Claude Sonnet 4.6 — balanced' },
-      { id: 'claude-opus-4-6', desc: 'Claude Opus 4.6 — most capable' },
-      { id: 'claude-haiku-4-5', desc: 'Claude Haiku 4.5 — fastest' },
-    ],
-  },
-  {
-    name: 'Google',
-    envKey: 'GEMINI_API_KEY',
-    storageKey: 'openjarvis-gemini-key',
-    models: [
-      { id: 'gemini-2.5-pro', desc: 'Gemini 2.5 Pro — flagship' },
-      { id: 'gemini-2.5-flash', desc: 'Gemini 2.5 Flash — fast' },
-      { id: 'gemini-3-pro', desc: 'Gemini 3 Pro — latest' },
-    ],
-  },
-  {
-    name: 'OpenRouter',
-    envKey: 'OPENROUTER_API_KEY',
-    storageKey: 'openjarvis-openrouter-key',
-    models: [
-      { id: 'openrouter/auto', desc: 'Auto — best model for the task' },
-      { id: 'openrouter/anthropic/claude-sonnet-4', desc: 'Claude Sonnet 4 via OpenRouter' },
-      { id: 'openrouter/deepseek/deepseek-r1', desc: 'DeepSeek R1 via OpenRouter' },
+      { id: 'beam', desc: 'beam — default Ollama Cloud model' },
     ],
   },
 ];
@@ -269,11 +237,11 @@ export function CommandPalette() {
       >
         {/* Tabs */}
         <div className="flex" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          {(['installed', 'catalogue', 'cloud'] as Tab[]).map((t) => (
+          {(['installed'] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className="flex-1 px-3 py-2.5 text-xs font-medium transition-colors cursor-pointer"
+              className="flex-1 px-3 py-2.5 text-base font-medium transition-colors cursor-pointer"
               style={{
                 color: tab === t ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
                 borderBottom: tab === t ? '2px solid var(--color-accent)' : '2px solid transparent',
@@ -299,7 +267,7 @@ export function CommandPalette() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={tab === 'installed' ? 'Search installed models...' : 'Search models to download...'}
-              className="flex-1 bg-transparent outline-none text-sm"
+              className="flex-1 bg-transparent outline-none text-base"
               style={{ color: 'var(--color-text)' }}
             />
             <button
@@ -314,12 +282,12 @@ export function CommandPalette() {
 
         {/* Status messages */}
         {pullError && (
-          <div className="px-4 py-2 text-xs" style={{ color: 'var(--color-error)', background: 'rgba(220,38,38,0.05)' }}>
+          <div className="px-4 py-2 text-base" style={{ color: 'var(--color-error)', background: 'rgba(220,38,38,0.05)' }}>
             {pullError}
           </div>
         )}
         {pullSuccess && (
-          <div className="px-4 py-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-success)', background: 'color-mix(in srgb, var(--color-success) 5%, transparent)' }}>
+          <div className="px-4 py-2 text-base flex items-center gap-1.5" style={{ color: 'var(--color-success)', background: 'color-mix(in srgb, var(--color-success) 5%, transparent)' }}>
             <Check size={12} /> Downloaded {pullSuccess} successfully
           </div>
         )}
@@ -328,7 +296,7 @@ export function CommandPalette() {
         <div className="max-h-[400px] overflow-y-auto py-2">
           {tab === 'installed' ? (
             filtered.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+              <div className="px-4 py-6 text-center text-base" style={{ color: 'var(--color-text-tertiary)' }}>
                 {models.length === 0
                   ? 'No models available — switch to "Download" to get started'
                   : 'No matching models'}
@@ -352,7 +320,7 @@ export function CommandPalette() {
                     >
                       <Cpu size={16} style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm truncate" style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text)', fontWeight: isActive ? 500 : 400 }}>
+                        <div className="text-base truncate" style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text)', fontWeight: isActive ? 500 : 400 }}>
                           {model.id}
                         </div>
                       </div>
@@ -386,13 +354,13 @@ export function CommandPalette() {
                   <div key={model.id} className="flex items-center gap-3 w-full px-4 py-2.5">
                     <Download size={16} style={{ color: 'var(--color-text-tertiary)' }} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm truncate" style={{ color: 'var(--color-text)' }}>{model.id}</div>
+                      <div className="text-base truncate" style={{ color: 'var(--color-text)' }}>{model.id}</div>
                       <div className="text-[11px]" style={{ color: 'var(--color-text-tertiary)' }}>{model.desc} &middot; {model.size}</div>
                     </div>
                     <button
                       onClick={() => handlePull(model.id)}
                       disabled={isPulling || !!pulling}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-base font-medium cursor-pointer"
                       style={{
                         background: justInstalled ? 'var(--color-accent-subtle)' : 'var(--color-accent)',
                         color: justInstalled ? 'var(--color-accent)' : 'var(--color-on-accent)',
@@ -414,12 +382,12 @@ export function CommandPalette() {
                     onChange={(e) => setCustomModel(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCustomPull(); } }}
                     placeholder="e.g. codellama:7b"
-                    className="flex-1 text-sm px-3 py-1.5 rounded-lg outline-none"
+                    className="flex-1 text-base px-3 py-1.5 rounded-lg outline-none"
                     style={{ background: 'var(--color-bg-secondary)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
                   />
                   <button
                     onClick={handleCustomPull} disabled={!customModel.trim() || !!pulling}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-base font-medium cursor-pointer"
                     style={{ background: 'var(--color-accent)', color: 'var(--color-on-accent)', opacity: (!customModel.trim() || pulling) ? 0.5 : 1 }}
                   >
                     <Download size={12} /> Pull
@@ -443,7 +411,7 @@ export function CommandPalette() {
                   <div key={provider.name} className="mb-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Cloud size={14} style={{ color: hasKey ? 'var(--color-success)' : 'var(--color-text-tertiary)' }} />
-                      <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{provider.name}</span>
+                      <span className="text-base font-medium" style={{ color: 'var(--color-text)' }}>{provider.name}</span>
                       {hasKey && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--color-success) 10%, transparent)', color: 'var(--color-success)' }}>
                           Connected
@@ -461,7 +429,7 @@ export function CommandPalette() {
                           onChange={(e) => setApiKeys((prev) => ({ ...prev, [provider.storageKey]: e.target.value }))}
                           onBlur={() => handleSaveKey(provider, apiKeys[provider.storageKey] || '')}
                           placeholder={`${provider.envKey}`}
-                          className="flex-1 text-xs px-2 py-1.5 bg-transparent outline-none font-mono"
+                          className="flex-1 text-base px-2 py-1.5 bg-transparent outline-none font-mono"
                           style={{ color: 'var(--color-text)' }}
                         />
                         <button
@@ -482,37 +450,57 @@ export function CommandPalette() {
                       )}
                     </div>
 
-                    {/* Models for this provider (only show if key is set) */}
+                    {/* Models returned dynamically by the backend */}
                     {hasKey && (
                       <div className="ml-5 flex flex-col gap-1">
-                        {provider.models.map((model) => {
-                          const isActive = model.id === selectedModel;
-                          return (
-                            <button
-                              key={model.id}
-                              onClick={() => handleSelect(model.id)}
-                              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors"
-                              style={{ background: isActive ? 'var(--color-accent-subtle)' : 'transparent' }}
-                              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg-secondary)'; }}
-                              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                            >
-                              <Cloud size={12} style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }} />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs truncate" style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text)', fontWeight: isActive ? 500 : 400 }}>
-                                  {model.id}
-                                </div>
-                                <div className="text-[10px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
-                                  {model.desc}
-                                </div>
+                        {(() => {
+                          const normalized = provider.name.toLowerCase();
+                          const cloudModels = models.filter((m) => {
+                            const id = m.id.toLowerCase();
+                            if (normalized === 'openai') return id.startsWith('gpt') || id.startsWith('o1') || id.startsWith('o3') || id.startsWith('o4') || (m.owned_by || '').toLowerCase().includes('openai');
+                            if (normalized === 'anthropic') return id.includes('claude') || (m.owned_by || '').toLowerCase().includes('anthropic');
+                            if (normalized === 'google') return id.includes('gemini') || (m.owned_by || '').toLowerCase().includes('google');
+                            if (normalized === 'openrouter') return id.startsWith('openrouter/') || (m.owned_by || '').toLowerCase().includes('openrouter');
+                            return false;
+                          });
+
+                          if (cloudModels.length === 0) {
+                            return (
+                              <div className="px-2 py-1 text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                                No {provider.name} models reported by the backend yet. Save the key, then refresh.
                               </div>
-                              {isActive && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}>
-                                  Active
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
+                            );
+                          }
+
+                          return cloudModels.map((model) => {
+                            const isActive = model.id === selectedModel;
+                            return (
+                              <button
+                                key={model.id}
+                                onClick={() => handleSelect(model.id)}
+                                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors"
+                                style={{ background: isActive ? 'var(--color-accent-subtle)' : 'transparent' }}
+                                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg-secondary)'; }}
+                                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                              >
+                                <Cloud size={12} style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text-tertiary)' }} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-base truncate" style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-text)', fontWeight: isActive ? 500 : 400 }}>
+                                    {model.id}
+                                  </div>
+                                  <div className="text-[10px] truncate" style={{ color: 'var(--color-text-tertiary)' }}>
+                                    {model.owned_by || 'remote provider model'}
+                                  </div>
+                                </div>
+                                {isActive && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'var(--color-accent-subtle)', color: 'var(--color-accent)' }}>
+                                    Active
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          });
+                        })()}
                       </div>
                     )}
                   </div>

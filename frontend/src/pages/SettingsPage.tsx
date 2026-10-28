@@ -44,16 +44,43 @@ function OllamaModelList() {
   );
 }
 
+const KEY_TO_ENV: Record<string, string> = {
+  'openjarvis-openai-key': 'OPENAI_API_KEY',
+  'openjarvis-anthropic-key': 'ANTHROPIC_API_KEY',
+  'openjarvis-gemini-key': 'GEMINI_API_KEY',
+  'openjarvis-openrouter-key': 'OPENROUTER_API_KEY',
+  'openjarvis-ollama-api-key': 'OLLAMA_API_KEY',
+  'openjarvis-search-key': 'TAVILY_API_KEY',
+};
+
+async function persistCloudKey(storageKey: string, value: string) {
+  const envKey = KEY_TO_ENV[storageKey];
+  if (!envKey) return;
+  try {
+    const { invoke } = await (async () => import('@tauri-apps/api/core'))();
+    await invoke('save_cloud_key', { keyName: envKey, keyValue: value });
+  } catch {
+    // Not running under Tauri (web dev mode) — env injection is not applicable.
+  }
+}
+
 function ApiKeyInput({ storageKey, placeholder }: { storageKey: string; placeholder: string }) {
   const [value, setValue] = useState(() => {
     try { return localStorage.getItem(storageKey) || ''; } catch { return ''; }
   });
   const [saved, setSaved] = useState(false);
-  const save = (v: string) => {
+  const [error, setError] = useState(false);
+  const save = async (v: string) => {
     setValue(v);
     try { if (v) localStorage.setItem(storageKey, v); else localStorage.removeItem(storageKey); } catch {}
     setSaved(true);
+    setError(false);
     setTimeout(() => setSaved(false), 2000);
+    try {
+      await persistCloudKey(storageKey, v);
+    } catch {
+      setError(true);
+    }
   };
   return (
     <div className="flex items-center gap-2">
@@ -416,35 +443,20 @@ export function SettingsPage() {
 
           {/* Models */}
           <Section title="Models">
-            <SettingRow label="Local models (Ollama)" description="Models available for local inference">
-              <OllamaModelList />
+            <SettingRow label="Cloud model" description="Only Ollama Cloud is enabled">
+              <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>beam</span>
             </SettingRow>
-            <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
-              Run <code className="px-1 py-0.5 rounded text-[11px]" style={{ background: 'var(--color-bg-tertiary)' }}>ollama pull &lt;model-name&gt;</code> in your terminal to add more models
-            </div>
-            <SettingRow label="Cloud providers" description="Green dot means API key is configured">
+            <SettingRow label="Cloud provider" description="Ollama Cloud (API key configured server-side)">
               <div className="flex flex-wrap gap-3">
-                <CloudProviderStatus label="OpenAI" storageKey="openjarvis-openai-key" />
-                <CloudProviderStatus label="Anthropic" storageKey="openjarvis-anthropic-key" />
-                <CloudProviderStatus label="Google" storageKey="openjarvis-gemini-key" />
-                <CloudProviderStatus label="OpenRouter" storageKey="openjarvis-openrouter-key" />
+                <CloudProviderStatus label="Ollama Cloud" storageKey="openjarvis-ollama-api-key" />
               </div>
             </SettingRow>
           </Section>
 
           {/* API Keys */}
           <Section title="API Keys">
-            <SettingRow label="OpenAI" description="GPT-4, GPT-3.5, etc.">
-              <ApiKeyInput storageKey="openjarvis-openai-key" placeholder="sk-..." />
-            </SettingRow>
-            <SettingRow label="Anthropic" description="Claude models">
-              <ApiKeyInput storageKey="openjarvis-anthropic-key" placeholder="sk-ant-..." />
-            </SettingRow>
-            <SettingRow label="Google" description="Gemini models">
-              <ApiKeyInput storageKey="openjarvis-gemini-key" placeholder="AI..." />
-            </SettingRow>
-            <SettingRow label="OpenRouter" description="Multi-provider routing">
-              <ApiKeyInput storageKey="openjarvis-openrouter-key" placeholder="sk-or-..." />
+            <SettingRow label="Ollama Cloud" description="beam model">
+              <ApiKeyInput storageKey="openjarvis-ollama-api-key" placeholder="Ollama cloud key" />
             </SettingRow>
           </Section>
 
@@ -522,7 +534,7 @@ export function SettingsPage() {
                   try { localStorage.setItem('openjarvis-memory-top-k', String(v)); } catch {}
                   showSaved();
                 }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
+                className="w-32 cursor-pointer accent-(--color-accent)"
               />
             </SettingRow>
             <SettingRow label="Min relevance score" description={`${memoryMinScore}`}>
@@ -538,7 +550,7 @@ export function SettingsPage() {
                   try { localStorage.setItem('openjarvis-memory-min-score', String(v)); } catch {}
                   showSaved();
                 }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
+                className="w-32 cursor-pointer accent-(--color-accent)"
               />
             </SettingRow>
             <SettingRow label="Max context tokens" description={`${memoryMaxTokens}`}>
@@ -554,7 +566,7 @@ export function SettingsPage() {
                   try { localStorage.setItem('openjarvis-memory-max-tokens', String(v)); } catch {}
                   showSaved();
                 }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
+                className="w-32 cursor-pointer accent-(--color-accent)"
               />
             </SettingRow>
           </Section>
@@ -569,7 +581,7 @@ export function SettingsPage() {
                 step="0.1"
                 value={settings.temperature}
                 onChange={(e) => { updateSettings({ temperature: parseFloat(e.target.value) }); showSaved(); }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
+                className="w-32 cursor-pointer accent-(--color-accent)"
               />
             </SettingRow>
             <SettingRow label="Max tokens" description={`${settings.maxTokens}`}>
@@ -580,7 +592,7 @@ export function SettingsPage() {
                 step="256"
                 value={settings.maxTokens}
                 onChange={(e) => { updateSettings({ maxTokens: parseInt(e.target.value) }); showSaved(); }}
-                className="w-32 cursor-pointer accent-[var(--color-accent)]"
+                className="w-32 cursor-pointer accent-(--color-accent)"
               />
             </SettingRow>
           </Section>

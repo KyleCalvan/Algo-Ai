@@ -1,116 +1,72 @@
-# OpenJarvis configuration — GLM-4.7-Flash eval on 8x A100-80GB
+OpenJarvis configuration — Gemini API evaluation
+===============================================================
+PILLAR 1: Intelligence — Gemini model
+===============================================================
 
-# ═══════════════════════════════════════════════════════════════
-# PILLAR 1: Intelligence — The Model
-# ═══════════════════════════════════════════════════════════════
-[intelligence]
-default_model = "zai-org/GLM-4.7-Flash"   # HuggingFace model ID
-fallback_model = "glm-4.7-flash"          # Catalog alias fallback
-preferred_engine = "vllm"                 # MoE model, vLLM is best for A100s
-provider = "local"                        # Running locally on this machine
-quantization = "none"                     # Full precision, we have 640GB VRAM
-# Generation defaults for eval
-temperature = 0.0                         # Deterministic for reproducibility
-max_tokens = 2048                         # Standard eval output length
-top_p = 0.9
-top_k = 40
-repetition_penalty = 1.0
+[intelligence] default_model = "gemini-2.5-flash" fallback_model = "gemini-2.5-flash" preferred_engine = "cloud" provider = "google" quantization = "none"
 
-# ═══════════════════════════════════════════════════════════════
-# PILLAR 2: Agent — The Agentic Harness
-# ═══════════════════════════════════════════════════════════════
-[agent]
-default_agent = "native_openhands"        # CodeAct-style agent
-max_turns = 10                            # Up to 10 tool-calling turns
-tools = "code_interpreter,web_search,file_read,calculator,think"
-objective = "Answer questions accurately using available tools"
-context_from_memory = false               # No memory injection during eval
+Evaluation defaults
 
-# ═══════════════════════════════════════════════════════════════
-# PILLAR 3: Tools — MCP Interface
-# ═══════════════════════════════════════════════════════════════
-[tools.storage]
-default_backend = "sqlite"
-db_path = "~/.openjarvis/memory.db"
+temperature = 0.0 max_tokens = 2048 top_p = 0.9 top_k = 40 repetition_penalty = 1.0
 
-[tools.mcp]
-enabled = true
+===============================================================
+PILLAR 2: Agent — Agentic harness
+===============================================================
 
-# ═══════════════════════════════════════════════════════════════
-# PILLAR 4: Engine — The Inference Runtime
-# ═══════════════════════════════════════════════════════════════
-[engine]
-default = "vllm"
+[agent] default_agent = "native_openhands" max_turns = 10 tools = "code_interpreter,web_search,file_read,calculator,think" objective = "Answer questions accurately using available tools" context_from_memory = false
 
-[engine.vllm]
-host = "http://localhost:8001"            # vLLM serving port
+===============================================================
+PILLAR 3: Tools — MCP and storage
+===============================================================
 
-[engine.ollama]
-host = "http://localhost:11434"
+[tools.storage] default_backend = "sqlite" db_path = "~/.openjarvis/memory.db"
 
-[engine.sglang]
-host = "http://localhost:30000"
+[tools.mcp] enabled = true
 
-[engine.llamacpp]
-host = "http://localhost:8080"
+===============================================================
+PILLAR 4: Engine — Cloud inference through Gemini
+===============================================================
 
-[engine.exo]
-host = "http://localhost:52415"
+[engine] default = "cloud"
 
-[engine.nexa]
-host = "http://localhost:18181"
-# device = "npu"  # optional: cpu, gpu, npu
+Local engines retained for optional future use
 
-[engine.uzu]
-host = "http://localhost:8080"
+[engine.vllm] host = "http://localhost:8001"
 
-[engine.apple_fm]
-host = "http://localhost:8079"
+[engine.ollama] host = "http://localhost:11434"
 
-# ═══════════════════════════════════════════════════════════════
-# PILLAR 5: Learning — Improvement Methodologies
-# ═══════════════════════════════════════════════════════════════
-[learning]
-enabled = false                           # No learning during eval
+[engine.sglang] host = "http://localhost:30000"
 
-[learning.routing]
-policy = "heuristic"
+[engine.llamacpp] host = "http://localhost:8080"
 
-[learning.intelligence]
-policy = "none"
+[engine.exo] host = "http://localhost:52415"
 
-[learning.agent]
-policy = "none"
+[engine.nexa] host = "http://localhost:18181"
 
-[learning.metrics]
-accuracy_weight = 0.6
-latency_weight = 0.2
-cost_weight = 0.1
-efficiency_weight = 0.1
+[engine.uzu] host = "http://localhost:8080"
 
-# ═══════════════════════════════════════════════════════════════
-# Supporting config
-# ═══════════════════════════════════════════════════════════════
-[telemetry]
-enabled = true
-db_path = "~/.openjarvis/telemetry.db"
-gpu_metrics = true
-gpu_poll_interval_ms = 50
-energy_vendor = ""                       # Auto-detect; or force "nvidia"/"amd"/"apple"/"cpu_rapl"
-warmup_samples = 0                       # Warmup iterations before steady-state measurement
-steady_state_window = 5                  # Sliding window size for CV stability check
-steady_state_threshold = 0.05            # Coefficient of variation threshold for steady state
+[engine.apple_fm] host = "http://localhost:8079"
 
-[traces]
-enabled = true                            # Record traces for analysis
-db_path = "~/.openjarvis/traces.db"
+===============================================================
+PILLAR 5: Learning — Evaluation settings
+===============================================================
 
-[server]
-# Bind to loopback by default so the API is not exposed to the local network.
-# To serve other devices on your LAN, set host = "0.0.0.0" AND set an API key
-# (OPENJARVIS_API_KEY / `jarvis auth generate-key`) — startup refuses a
-# non-loopback bind without a key. The "server" security profile also flips
-# this to 0.0.0.0 intentionally.
-host = "127.0.0.1"
-port = 8000
-agent = "native_openhands"
+[learning] enabled = false
+
+[learning.routing] policy = "heuristic"
+
+[learning.intelligence] policy = "none"
+
+[learning.agent] policy = "none"
+
+[learning.metrics] accuracy_weight = 0.6 latency_weight = 0.2 cost_weight = 0.1 efficiency_weight = 0.1
+
+===============================================================
+Supporting configuration
+===============================================================
+
+[telemetry] enabled = true db_path = "~/.openjarvis/telemetry.db" gpu_metrics = true gpu_poll_interval_ms = 50 energy_vendor = "" warmup_samples = 0 steady_state_window = 5 steady_state_threshold = 0.05
+
+[traces] enabled = true db_path = "~/.openjarvis/traces.db"
+
+[server] host = "127.0.0.1" port = 8000 agent = "native_openhands"

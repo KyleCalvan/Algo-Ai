@@ -51,7 +51,27 @@ class MultiEngine(InferenceEngine):
             return engine
         # If model looks like a cloud model, route to the cloud engine
         # rather than falling back to the local engine (which would 404).
-        if any(model.startswith(p) for p in self._CLOUD_PREFIXES):
+        try:
+            from openjarvis.server.cloud_router import is_cloud_model
+            _is_cloudish = is_cloud_model(model)
+        except Exception:
+            _is_cloudish = any(
+                model.startswith(prefix)
+                for prefix in (
+                    "gpt-",
+                    "chatgpt-",
+                    "o1",
+                    "o3",
+                    "o4",
+                    "claude-",
+                    "gemini-",
+                    "MiniMax-",
+                    "deepseek-",
+                    "openrouter/",
+                    "codex/",
+                )
+            )
+        if _is_cloudish:
             for key, eng in self._engines:
                 if key == "cloud":
                     logger.info("Routing cloud model %r to cloud engine", model)

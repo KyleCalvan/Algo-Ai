@@ -175,12 +175,22 @@ def serve(
     import os
 
     cloud_engine = None
-    _has_cloud = (
-        os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("ANTHROPIC_API_KEY")
-        or os.environ.get("GEMINI_API_KEY")
-        or os.environ.get("GOOGLE_API_KEY")
-        or os.environ.get("OPENROUTER_API_KEY")
+    try:
+        from openjarvis.server.cloud_router import _load_keys
+
+        _file_keys = _load_keys()
+    except Exception:
+        _file_keys = {}
+    _has_cloud = any(
+        os.environ.get(_name) or _file_keys.get(_name)
+        for _name in (
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "OPENROUTER_API_KEY",
+            "MINIMAX_API_KEY",
+        )
     )
     if _has_cloud and engine_name != "cloud":
         try:

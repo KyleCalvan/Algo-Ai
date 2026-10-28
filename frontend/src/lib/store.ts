@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { parseBlocksFromContent, stripVizForDisplay } from './block-parser';
 import type {
   Conversation,
   ChatMessage,
@@ -15,6 +16,7 @@ import type {
   TokenUsage,
 } from '../types';
 import type { ManagedAgent } from './api';
+import type { AssistantContext } from './context.tsx';
 
 export interface CachedConnector {
   connector_id: string;
@@ -80,6 +82,7 @@ interface Settings {
   temperature: number;
   maxTokens: number;
   speechEnabled: boolean;
+  teachingMode: boolean;
 }
 
 function loadSettings(): Settings {
@@ -93,6 +96,7 @@ function loadSettings(): Settings {
     temperature: 0.7,
     maxTokens: 4096,
     speechEnabled: false,
+    teachingMode: true,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -232,6 +236,34 @@ interface AppState {
   // Model loading
   modelLoading: boolean;
   setModelLoading: (loading: boolean) => void;
+
+  // Assistant panel
+  assistantOpen: boolean;
+  assistantMinimized: boolean;
+  assistantMessages: ChatMessage[];
+  assistantStreamState: StreamState;
+  assistantContext: AssistantContext | null;
+  assistantName: string;
+  assistantAvatar: string;
+
+  // Actions: assistant
+  toggleAssistant: () => void;
+  setAssistantOpen: (open: boolean) => void;
+  setAssistantMinimized: (minimized: boolean) => void;
+  setAssistantContext: (context: AssistantContext | null) => void;
+  addAssistantMessage: (message: ChatMessage) => void;
+  updateAssistantStream: (state: Partial<StreamState> | ((prev: StreamState) => Partial<StreamState>)) => void;
+  updateLastAssistantMessage: (
+    content: string,
+    toolCalls?: ToolCallInfo[],
+    usage?: TokenUsage,
+    telemetry?: MessageTelemetry,
+    researchSources?: ResearchSource[],
+  ) => void;
+  resetAssistantStream: () => void;
+  clearAssistantMessages: () => void;
+  setAssistantName: (name: string) => void;
+  setAssistantAvatar: (avatar: string) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -267,6 +299,15 @@ export const useAppStore = create<AppState>((set, get) => {
     optInAnonId: localStorage.getItem(OPTIN_ANONID_KEY) || crypto.randomUUID(),
     optInModalSeen: localStorage.getItem(OPTIN_SEEN_KEY) === 'true',
     optInModalOpen: false,
+
+    // Assistant panel
+    assistantOpen: false,
+    assistantMinimized: false,
+    assistantMessages: [],
+    assistantStreamState: INITIAL_STREAM,
+    assistantContext: null,
+    assistantName: 'Jarvis',
+    assistantAvatar: '🤖',
 
     // ── Conversations ───────────────────────────────────────────────
 
@@ -416,7 +457,12 @@ export const useAppStore = create<AppState>((set, get) => {
       if (!conv) return;
       const lastMsg = conv.messages[conv.messages.length - 1];
       if (lastMsg && lastMsg.role === 'assistant') {
-        lastMsg.content = content;
+        lastMsg.content = stripVizForDisplay(content);
+        try {
+          const { blocks } = parseBlocksFromContent(content);
+          if (blocks.length) lastMsg.visualizations = blocks as any;
+          else lastMsg.visualizations = undefined;
+        } catch {}
         if (toolCalls) lastMsg.toolCalls = toolCalls;
         if (usage) lastMsg.usage = usage;
         if (telemetry) lastMsg.telemetry = telemetry;
@@ -535,6 +581,47 @@ export const useAppStore = create<AppState>((set, get) => {
       localStorage.setItem(OPTIN_SEEN_KEY, 'true');
       set({ optInModalSeen: true });
     },
+
+    // ── Assistant panel ──────────────────────────────────────────────
+    toggleAssistant: () => set((s) => ({ assistantOpen: !s.assistantOpen })),
+    setAssistantOpen: (open: boolean) => set({ assistantOpen: open }),
+    setAssistantMinimized: (minimized: boolean) => set({ assistantMinimized: minimized }),
+    setAssistantContext: (context: AssistantContext | null) => set({ assistantContext: context }),
+    addAssistantMessage: (message: ChatMessage) =>
+      set((s) => ({ assistantMessages: [...s.assistantMessages, message] })),
+    updateAssistantStream: (partial: Partial<StreamState> | ((prev: StreamState) => Partial<StreamState>)) =>
+      set((s) => ({
+        assistantStreamState: {
+          ...s.assistantStreamState,
+          ...(typeof partial === 'function' ? partial(s.assistantStreamState) : partial),
+        },
+      })),
+    updateLastAssistantMessage: (
+      content: string,
+      toolCalls?: ToolCallInfo[],
+      usage?: TokenUsage,
+      telemetry?: MessageTelemetry,
+      researchSources?: ResearchSource[],
+    ) =>
+      set((s) => {
+        const messages = [...s.assistantMessages];
+        const lastIdx = messages.length - 1;
+        if (lastIdx >= 0 && messages[lastIdx].role === 'assistant') {
+          messages[lastIdx] = {
+            ...messages[lastIdx],
+            content,
+            toolCalls,
+            usage,
+            telemetry,
+            researchSources,
+          };
+        }
+        return { assistantMessages: messages };
+      }),
+    resetAssistantStream: () => set({ assistantStreamState: INITIAL_STREAM }),
+    clearAssistantMessages: () => set({ assistantMessages: [] }),
+    setAssistantName: (name: string) => set({ assistantName: name }),
+    setAssistantAvatar: (avatar: string) => set({ assistantAvatar: avatar }),
   };
 });
 

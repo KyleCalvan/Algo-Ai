@@ -172,11 +172,20 @@ def _parse_param_count(model_name: str) -> float:
 _CLOUD_PREFIXES = ("gpt-", "claude-", "gemini-", "o1-", "o3-", "o4-")
 
 
+def _is_cloud_model_id(model: str) -> bool:
+    try:
+        from openjarvis.server.cloud_router import is_cloud_model
+
+        return is_cloud_model(model)
+    except Exception:
+        return any(model.startswith(prefix) for prefix in _CLOUD_PREFIXES)
+
+
 def _pick_recommended_model(
     model_ids: list[str],
 ) -> dict[str, str]:
     """Pick the second-largest local model from a list."""
-    local = [m for m in model_ids if not any(m.startswith(p) for p in _CLOUD_PREFIXES)]
+    local = [m for m in model_ids if not _is_cloud_model_id(m)]
     if not local:
         return {
             "model": model_ids[0] if model_ids else "",
@@ -459,6 +468,10 @@ def _build_managed_system_prompt(system_prompt: str, app_config: Any) -> str:
     (caller decides whether to append a SYSTEM message); an agent with
     neither persona nor template yields an empty string, preserving the
     prior no-SYSTEM-message behavior.
+
+    If ``app_config.visual_tutor.enabled`` is true, the Visual AI Tutor
+    protocol (visualization block syntax + teaching rules) is appended so
+    the agent emits inline visualizations while teaching.
     """
     from openjarvis.prompt.builder import SystemPromptBuilder
 
@@ -467,7 +480,14 @@ def _build_managed_system_prompt(system_prompt: str, app_config: Any) -> str:
         memory_files_config=getattr(app_config, "memory_files", None),
         system_prompt_config=getattr(app_config, "system_prompt", None),
     )
-    return builder.build()
+    out = builder.build()
+    vt_cfg = getattr(app_config, "visual_tutor", None)
+    enabled = getattr(vt_cfg, "enabled", False) if vt_cfg is not None else False
+    if enabled:
+        from openjarvis.prompt.visual_tutor import augment_prompt
+
+        out = augment_prompt(out, enabled=True)
+    return out
 
 
 def _sampler_kwargs(config: Dict[str, Any]) -> Dict[str, Any]:

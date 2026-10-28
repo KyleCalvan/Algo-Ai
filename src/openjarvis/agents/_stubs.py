@@ -172,6 +172,20 @@ class BaseAgent(ABC):
             except Exception:
                 effective_system_prompt = None
         if effective_system_prompt:
+            # Inject Visual AI Tutor protocol when enabled, so agents emit
+            # inline viz blocks while teaching.
+            try:
+                from openjarvis.core.config import load_config
+                from openjarvis.prompt.visual_tutor import augment_prompt
+
+                _cfg = load_config()
+                _vt = getattr(_cfg, "visual_tutor", None)
+                if getattr(_vt, "enabled", False):
+                    effective_system_prompt = augment_prompt(
+                        effective_system_prompt, enabled=True
+                    )
+            except Exception:
+                pass
             messages.append(Message(role=Role.SYSTEM, content=effective_system_prompt))
         if context and context.conversation.messages:
             messages.extend(context.conversation.messages)

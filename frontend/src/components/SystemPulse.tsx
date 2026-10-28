@@ -49,10 +49,11 @@ export function SystemPulse({ apiReachable }: { apiReachable: boolean | null }) 
     <div
       className="fixed top-0 left-0 right-0 h-[3px] z-50"
       style={{
-        background: isTravel
+        backgroundImage: isTravel
           ? `linear-gradient(90deg, transparent, ${config.color}, transparent)`
           : `linear-gradient(90deg, transparent 5%, ${config.color} 30%, ${config.color} 70%, transparent 95%)`,
         backgroundSize: isTravel ? '200% 100%' : '100% 100%',
+        backgroundRepeat: 'no-repeat',
         animation: config.animation,
       }}
     />

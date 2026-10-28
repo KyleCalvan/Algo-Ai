@@ -1,14 +1,18 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router';
 import { Layout } from './components/Layout';
-import { ChatPage } from './pages/ChatPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { GetStartedPage } from './pages/GetStartedPage';
-import { AgentsPage } from './pages/AgentsPage';
-import { DataSourcesPage } from './pages/DataSourcesPage';
-import { LogsPage } from './pages/LogsPage';
-import { CommandPalette } from './components/CommandPalette';
+const ChatPage = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })));
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const GetStartedPage = lazy(() => import('./pages/GetStartedPage').then(m => ({ default: m.GetStartedPage })));
+const AgentsPage = lazy(() => import('./pages/AgentsPage').then(m => ({ default: m.AgentsPage })));
+const DataSourcesPage = lazy(() => import('./pages/DataSourcesPage').then(m => ({ default: m.DataSourcesPage })));
+const ModuleLibraryPage = lazy(() => import('./pages/ModuleLibraryPage').then(m => ({ default: m.ModuleLibraryPage })));
+const LandingPage = lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
+const ModulePage = lazy(() => import('./pages/ModulePage').then(m => ({ default: m.ModulePage })));
+const QuizPage = lazy(() => import('./pages/QuizPage').then(m => ({ default: m.QuizPage })));
+const LogsPage = lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
+const CommandPalette = lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })));
 import { SetupScreen } from './components/SetupScreen';
 import { Toaster } from './components/ui/sonner';
 import { useAppStore } from './lib/store';
@@ -16,6 +20,7 @@ import { fetchModels, fetchServerInfo, fetchSavings, submitSavings, isTauri } fr
 import { OptInModal } from './components/OptInModal';
 import { UpdateChecker } from './components/Desktop/UpdateChecker';
 import { track, hashId } from './lib/analytics';
+import { AssistantSettingsProvider } from './components/Assistant';
 
 export default function App() {
   const [setupDone, setSetupDone] = useState(!isTauri());
@@ -70,7 +75,14 @@ export default function App() {
     fetchModels()
       .then((m) => {
         setModels(m);
-        if (!selectedModel && m.length > 0) setSelectedModel(m[0].id);
+        if (!selectedModel) {
+          if (m.length > 0) {
+            const beamModel = m.find((x: any) => x.id === 'beam');
+            setSelectedModel(beamModel?.id || m[0].id);
+          } else {
+            setSelectedModel('beam');
+          }
+        }
       })
       .catch(() => setModels([]))
       .finally(() => setModelsLoading(false));
@@ -158,6 +170,7 @@ export default function App() {
   }, []);
 
   const toggleSystemPanel = useAppStore((s) => s.toggleSystemPanel);
+  const toggleAssistant = useAppStore((s) => s.toggleAssistant);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -170,10 +183,14 @@ export default function App() {
         e.preventDefault();
         toggleSystemPanel();
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        toggleAssistant();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [commandPaletteOpen, setCommandPaletteOpen, toggleSystemPanel]);
+  }, [commandPaletteOpen, setCommandPaletteOpen, toggleSystemPanel, toggleAssistant]);
 
 
   if (!setupDone) {
@@ -181,24 +198,30 @@ export default function App() {
   }
 
   return (
-    <>
+    <AssistantSettingsProvider>
       <UpdateChecker />
+      <Suspense fallback={<div style={{ padding: 24 }}>Loading…</div>}>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<ChatPage />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route index element={<LandingPage />} />
+        <Route path="chat" element={<ChatPage />} />
+        <Route path="settings" element={<SettingsPage />} />
           <Route path="get-started" element={<GetStartedPage />} />
           <Route path="data-sources" element={<DataSourcesPage />} />
-          <Route path="agents" element={<AgentsPage />} />
+          <Route path="landing" element={<LandingPage />} />
+          <Route path="modules" element={<ModuleLibraryPage />} />
+          <Route path="modules/:moduleId" element={<ModulePage />} />
+          <Route path="quiz" element={<QuizPage />} />
           <Route path="logs" element={<LogsPage />} />
+          <Route path="*" element={<div style={{ padding: 24 }}>Not found</div>} />
         </Route>
       </Routes>
-      <Toaster position="bottom-right" />
       {commandPaletteOpen && <CommandPalette />}
       {optInModalOpen && (
         <OptInModal onClose={() => setOptInModalOpen(false)} />
       )}
-    </>
+      </Suspense>
+      <Toaster position="bottom-right" />
+    </AssistantSettingsProvider>
   );
 }

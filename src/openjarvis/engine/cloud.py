@@ -74,10 +74,7 @@ _ANTHROPIC_MODELS = [
     "claude-haiku-4-5-20251001",
 ]
 _GOOGLE_MODELS = [
-    "gemini-2.5-pro",
     "gemini-2.5-flash",
-    "gemini-3-pro",
-    "gemini-3-flash",
     "gemini-3.1-pro-preview",
     "gemini-3.1-flash-lite-preview",
     "gemini-3-flash-preview",
@@ -329,6 +326,17 @@ class CloudEngine(InferenceEngine):
         self._init_clients()
 
     def _init_clients(self) -> None:
+        # Pick up provider keys written through the UI/settings flow in
+        # ~/.openjarvis/cloud-keys.env in addition to process environment.
+        try:
+            from openjarvis.server.cloud_router import _load_keys
+
+            for key_name, value in _load_keys().items():
+                if value and not os.environ.get(key_name):
+                    os.environ[key_name] = value
+        except Exception:
+            pass
+
         if os.environ.get("OPENAI_API_KEY"):
             try:
                 import openai

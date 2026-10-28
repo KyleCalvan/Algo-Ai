@@ -64,17 +64,17 @@ def _ensure_identity_prompt(messages: list[Message], app_config) -> list[Message
     config degrades to "no injection" rather than crashing the endpoint, but
     the failure is logged (per REVIEW.md — never silently swallow).
     """
-    if any(m.role == Role.SYSTEM for m in messages):
-        return messages
-
-    prompt = ""
+    # Load config for identity + visual tutor availability.
     try:
         if app_config is not None:
-            prompt = app_config.agent.default_system_prompt or ""
+            cfg = app_config
         else:
             from openjarvis.core.config import load_config
 
-            prompt = load_config().agent.default_system_prompt or ""
+            cfg = load_config()
+        prompt = getattr(getattr(cfg, "agent", None), "default_system_prompt", "") or ""
+        vt_cfg = getattr(cfg, "visual_tutor", None)
+        vt_enabled = getattr(vt_cfg, "enabled", False) if vt_cfg is not None else False
     except Exception:
         logging.getLogger("openjarvis.server").debug(
             "Identity system prompt resolution failed; "
@@ -83,10 +83,63 @@ def _ensure_identity_prompt(messages: list[Message], app_config) -> list[Message
         )
         return messages
 
-    if not prompt:
-        return messages
+    from openjarvis.prompt.visual_tutor import build_visual_tutor_prompt
 
-    return [Message(role=Role.SYSTEM, content=prompt), *messages]
+    try:
+        from openjarvis.server import modules_routes as _modules_routes
+    except Exception:
+        _modules_routes = None
+
+    vt_frag = build_visual_tutor_prompt(enabled=vt_enabled)
+
+    query_text = ""
+    for m in reversed(messages):
+        if m.role == Role.SYSTEM:
+            continue
+        if m.role == Role.USER and m.content:
+            query_text = m.content or ""
+            break
+    module_context = ""
+    if _modules_routes is not None:
+        try:
+            module_context = _modules_routes.get_relevant_learning_modules(
+                query_text or "", max_modules=2, max_chars=3000
+            )
+        except Exception:
+            module_context = ""
+
+    # Existing system message: augment in place with vt protocol when absent.
+    if any(m.role == Role.SYSTEM for m in messages):
+        extras = "\n\n".join(part for part in (vt_frag, module_context) if part)
+        if not extras:
+            return messages
+        augmented = []
+        appended = False
+        for m in messages:
+            if m.role == Role.SYSTEM and not appended:
+                if extras.strip() not in (m.content or ""):
+                    augmented.append(
+                        Message(
+                            role=Role.SYSTEM,
+                            content=(m.content or "") + "\n\n" + extras,
+                            name=m.name,
+                            tool_call_id=getattr(m, "tool_call_id", None),
+                        )
+                    )
+                else:
+                    augmented.append(m)
+                appended = True
+            else:
+                augmented.append(m)
+        return augmented
+
+    body = prompt
+    for extra in (vt_frag, module_context):
+        if extra:
+            body = (body + "\n\n" + extra) if body else extra
+    if not body:
+        return messages
+    return [Message(role=Role.SYSTEM, content=body), *messages]
 
 
 @router.post("/v1/chat/completions")
@@ -222,7 +275,16 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
     # tools (e.g. injecting MCP tools through this endpoint and wanting
     # the agent to execute them), add an explicit opt-in header rather
     # than removing this guard — silent re-routing is what produced #414.
-    if agent is not None and not request_body.tools:
+    # Cloud models have no local MultiEngine entry; route them through the
+    # direct streaming/cloud path instead of the managed agent so they use
+    # cloud_router without requiring SDK packages (e.g. google-genai).
+    from openjarvis.server.cloud_router import is_cloud_model as _is_cloud_model
+
+    if (
+        agent is not None
+        and not request_body.tools
+        and not _is_cloud_model(model)
+    ):
         return _handle_agent(
             agent,
             model,
@@ -233,7 +295,7 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
         )
 
     bus = getattr(request.app.state, "bus", None)
-    return _handle_direct(
+    return await _handle_direct(
         engine,
         model,
         request_body,
@@ -243,7 +305,7 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
     )
 
 
-def _handle_direct(
+async def _handle_direct(
     engine,
     model: str,
     req: ChatCompletionRequest,
@@ -254,6 +316,49 @@ def _handle_direct(
     """Direct engine call without agent."""
     messages = _to_messages(req.messages)
     messages = _ensure_identity_prompt(messages, app_config)
+
+    # Cloud models have no local engine entry; generate via cloud_router.
+    # (Stream -> collect so the non-streaming endpoint still works.)
+    try:
+        from openjarvis.server.cloud_router import is_cloud_model, stream_cloud
+    except Exception:
+        is_cloud_model = lambda m: False
+        stream_cloud = None
+    if is_cloud_model(model) and stream_cloud is not None:
+        chunks: list[str] = []
+        try:
+            async for token in stream_cloud(
+                model,
+                messages,
+                req.temperature,
+                req.max_tokens,
+            ):
+                chunks.append(token)
+        except Exception as exc:
+            status_code = 429 if "429" in str(exc) else 502
+            raise HTTPException(status_code=status_code, detail=str(exc))
+        content = "".join(chunks)
+        if not content:
+            content = "No response was generated."
+        return ChatCompletionResponse(
+            model=model,
+            choices=[
+                Choice(
+                    message=ChoiceMessage(
+                        role="assistant",
+                        content=content,
+                    ),
+                    finish_reason="stop",
+                )
+            ],
+            usage=UsageInfo(
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+            ),
+            complexity=complexity_info,
+        )
+
     kwargs: dict[str, Any] = {}
     if req.tools:
         kwargs["tools"] = req.tools
@@ -653,13 +758,24 @@ async def _handle_stream(
                 exc,
                 exc_info=True,
             )
+            message = str(exc)
+            if "401" in message:
+                message = (
+                    "Authentication failed (HTTP 401). Check or refresh the "
+                    "provider API key in the Cloud Models tab."
+                )
+            elif "429" in message:
+                message = (
+                    "Rate limit exceeded (HTTP 429). Please wait before retrying "
+                    "or switch to another model/provider."
+                )
             error_chunk = ChatCompletionChunk(
                 id=chunk_id,
                 model=model,
                 choices=[
                     StreamChoice(
                         delta=DeltaMessage(
-                            content=f"\n\nError during generation: {exc}",
+                            content=f"\n\nError during generation: {message}",
                         ),
                         finish_reason="stop",
                     )
@@ -736,6 +852,13 @@ async def list_models(request: Request) -> ModelListResponse:
     model_ids = [m for m in all_ids if not is_cloud_model(m)]
     if not model_ids:
         model_ids = await list_local_models()
+
+    # Also discover cloud models actually offered by configured providers.
+    from openjarvis.server.cloud_router import list_cloud_models
+
+    for cid in await list_cloud_models():
+        if cid not in model_ids:
+            model_ids.append(cid)
 
     return ModelListResponse(
         data=[ModelObject(id=mid) for mid in model_ids],
